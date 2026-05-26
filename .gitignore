@@ -1,6 +1,9 @@
 # Git worktrees (local isolated workspaces)
 .worktrees/
 
+# Local symlink to ../../../opensource path deps (see rust/Cargo.toml)
+opensource/
+
 # Miscellaneous
 *.class
 *.log
