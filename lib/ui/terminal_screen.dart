@@ -3,13 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../engine/engine_binding.dart';
+import '../engine/terminal_engine_client.dart';
 import '../input/key_input.dart';
 import '../pty/flutter_pty_backend.dart';
 import '../pty/pty_backend.dart';
+import '../render/cell_metrics.dart';
+import '../render/glyph_cache.dart';
 import '../render/mirror_grid.dart';
 import '../render/terminal_painter.dart';
-import '../src/rust/api/terminal.dart';
-import '../src/rust/engine.dart';
 
 class TerminalScreen extends StatefulWidget {
   const TerminalScreen({super.key});
@@ -19,52 +21,52 @@ class TerminalScreen extends StatefulWidget {
 
 class _TerminalScreenState extends State<TerminalScreen> {
   static const _style = kTerminalTextStyle;
-
   late final CellMetrics _metrics = CellMetrics.measure(_style);
+  late final GlyphCache _glyphs = GlyphCache(
+    fontFamily: _style.fontFamily!,
+    fontSize: _style.fontSize!,
+    cellWidth: _metrics.width,
+  );
+
   final MirrorGrid _grid = MirrorGrid();
   final FocusNode _focus = FocusNode();
+  final ValueNotifier<String> _title = ValueNotifier('flutter_alacritty');
 
-  TerminalEngine? _engine;
+  TerminalEngineClient? _client;
   PtyBackend? _pty;
   StreamSubscription<Uint8List>? _outputSub;
   int _cols = 0, _rows = 0;
 
   void _ensureStarted(int cols, int rows) {
-    if (_engine != null) {
+    if (_client != null) {
       if (cols != _cols || rows != _rows) {
         _cols = cols;
         _rows = rows;
-        engineResize(engine: _engine!, columns: cols, rows: rows);
+        _client!.resize(cols, rows);
         _pty!.resize(rows, cols);
       }
       return;
     }
     _cols = cols;
     _rows = rows;
-    _engine = engineNew(columns: cols, rows: rows);
-    _pty = FlutterPtyBackend(rows: rows, columns: cols);
-    _outputSub = _pty!.output.listen(_onOutput);
+
+    final pty = FlutterPtyBackend(rows: rows, columns: cols);
+    final binding = FrbEngineBinding(
+      columns: cols,
+      rows: rows,
+      onPtyWrite: pty.write,
+      onTitle: (t) => _title.value = t,
+      onBell: _flashBell,
+      onClipboard: (t) => Clipboard.setData(ClipboardData(text: t)),
+    );
+
+    _pty = pty;
+    _client = TerminalEngineClient(binding: binding, grid: _grid);
+    _grid.apply(binding.fullSnapshot()); // first frame
+    _outputSub = pty.output.listen(_client!.feed);
   }
 
-  void _onOutput(Uint8List bytes) {
-    if (!mounted || _engine == null) return;
-    engineAdvance(engine: _engine!, bytes: bytes);
-    _pushSnapshot();
-  }
-
-  void _pushSnapshot() {
-    final s = engineSnapshot(engine: _engine!);
-    _grid.update(MirrorSnapshot(
-      rows: s.rows,
-      columns: s.columns,
-      codepoints: s.cells.map((c) => c.codepoint).toList(growable: false),
-      fg: s.cells.map((c) => c.fg).toList(growable: false),
-      bg: s.cells.map((c) => c.bg).toList(growable: false),
-      cursorRow: s.cursorLine,
-      cursorCol: s.cursorCol,
-      cursorVisible: s.cursorVisible,
-    ));
-  }
+  void _flashBell() {/* sub-project C may add a real flash; A: hook present */}
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -81,7 +83,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void dispose() {
     _outputSub?.cancel();
     _pty?.kill();
+    _client?.dispose();
     _grid.dispose();
+    _title.dispose();
     _focus.dispose();
     super.dispose();
   }
@@ -92,27 +96,22 @@ class _TerminalScreenState extends State<TerminalScreen> {
       backgroundColor: const Color(0xFF181818),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final cols = (constraints.maxWidth / _metrics.width)
-              .floor()
-              .clamp(1, 1000);
-          final rows = (constraints.maxHeight / _metrics.height)
-              .floor()
-              .clamp(1, 1000);
-          // Defer start/resize until after layout to avoid setState-in-build.
-          WidgetsBinding.instance.addPostFrameCallback(
-              (_) => _ensureStarted(cols, rows));
+          final cols = (constraints.maxWidth / _metrics.width).floor().clamp(1, 1000);
+          final rows = (constraints.maxHeight / _metrics.height).floor().clamp(1, 1000);
+          WidgetsBinding.instance.addPostFrameCallback((_) => _ensureStarted(cols, rows));
           return Focus(
             focusNode: _focus,
             autofocus: true,
             onKeyEvent: _onKey,
             child: GestureDetector(
-              onTap: () => _focus.requestFocus(),
+              onTap: _focus.requestFocus,
               child: CustomPaint(
                 size: Size.infinite,
                 painter: TerminalPainter(
                   grid: _grid,
-                  style: _style,
-                  metrics: _metrics,
+                  glyphs: _glyphs,
+                  cellWidth: _metrics.width,
+                  cellHeight: _metrics.height,
                 ),
               ),
             ),

@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 /// One line's cells (native types — decoupled from FRB so MirrorGrid is
