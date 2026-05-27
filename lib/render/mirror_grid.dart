@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 
 /// One line's cells (native types — decoupled from FRB so MirrorGrid is
@@ -8,11 +10,13 @@ class LineCells {
     required this.codepoints,
     required this.fg,
     required this.bg,
+    required this.flags,
   });
   final int line;
   final Int32List codepoints;
   final Int32List fg;
   final Int32List bg;
+  final Uint16List flags;
 }
 
 /// A render update: either a full replace or a set of changed lines.
@@ -44,6 +48,7 @@ class MirrorGrid extends ChangeNotifier {
   List<Int32List> _codepoints = [];
   List<Int32List> _fg = [];
   List<Int32List> _bg = [];
+  List<Uint16List> _flags = [];
   int _cursorRow = 0;
   int _cursorCol = 0;
   bool _cursorVisible = false;
@@ -60,6 +65,7 @@ class MirrorGrid extends ChangeNotifier {
   int codepointAt(int row, int col) => _codepoints[row][col];
   int fgAt(int row, int col) => _fg[row][col];
   int bgAt(int row, int col) => _bg[row][col];
+  int flagsAt(int row, int col) => _flags[row][col];
 
   void _ensureSize(int rows, int columns) {
     if (rows == _rows && columns == _columns) return;
@@ -68,6 +74,7 @@ class MirrorGrid extends ChangeNotifier {
     _codepoints = List.generate(rows, (_) => Int32List(columns)..fillRange(0, columns, 32));
     _fg = List.generate(rows, (_) => Int32List(columns)..fillRange(0, columns, 0xD8D8D8));
     _bg = List.generate(rows, (_) => Int32List(columns)..fillRange(0, columns, 0x181818));
+    _flags = List.generate(rows, (_) => Uint16List(columns));
   }
 
   /// Empty viewport for startup — avoids a sync full_snapshot FFI round-trip.
@@ -95,6 +102,7 @@ class MirrorGrid extends ChangeNotifier {
       _codepoints[l.line].setRange(0, copy, l.codepoints);
       _fg[l.line].setRange(0, copy, l.fg);
       _bg[l.line].setRange(0, copy, l.bg);
+      _flags[l.line].setRange(0, copy, l.flags);
     }
     _cursorRow = u.cursorRow;
     _cursorCol = u.cursorCol;
