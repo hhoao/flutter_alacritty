@@ -1,0 +1,47 @@
+# flutter_alacritty config — copy to:
+#   $XDG_CONFIG_HOME/flutter_alacritty/flutter_alacritty.toml  (or ~/.config/...)
+# Any missing key uses its built-in default; a malformed file falls back entirely.
+# Colors: "#rrggbb", "#aarrggbb", or "0xrrggbb".
+
+[colors.primary]
+background = "#181818"
+foreground = "#d8d8d8"
+
+[colors.normal]   # ANSI 0-7
+black = "#000000"
+red = "#cc0000"
+green = "#4e9a06"
+yellow = "#c4a000"
+blue = "#3465a4"
+magenta = "#75507b"
+cyan = "#06989a"
+white = "#d3d7cf"
+
+[colors.bright]   # ANSI 8-15
+black = "#555753"
+red = "#ef2929"
+green = "#8ae234"
+yellow = "#fce94f"
+blue = "#729fcf"
+magenta = "#ad7fa8"
+cyan = "#34e2e2"
+white = "#eeeeec"
+
+[colors.selection]
+background = "#3a6ea5"
+
+[font]
+family = "DejaVu Sans Mono"
+fallback = ["Noto Sans Mono CJK SC", "WenQuanYi Zen Hei Mono", "monospace"]
+size = 14.0
+line_height = 1.2
+
+[cursor]
+blink_interval = 530   # ms
+
+[scrolling]
+history = 10000
+multiplier = 3         # lines per wheel notch
+
+[mouse]
+double_click_threshold = 300   # ms
