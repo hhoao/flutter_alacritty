@@ -4,6 +4,7 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../engine.dart';
+import '../event_proxy.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
@@ -12,7 +13,7 @@ TerminalEngine engineNew({required int columns, required int rows}) => RustLib
     .api
     .crateApiTerminalEngineNew(columns: columns, rows: rows);
 
-void engineAdvance({
+Future<void> engineAdvance({
   required TerminalEngine engine,
   required List<int> bytes,
 }) => RustLib.instance.api.crateApiTerminalEngineAdvance(
@@ -20,8 +21,14 @@ void engineAdvance({
   bytes: bytes,
 );
 
-RenderSnapshot engineSnapshot({required TerminalEngine engine}) =>
-    RustLib.instance.api.crateApiTerminalEngineSnapshot(engine: engine);
+Future<RenderUpdate> engineTakeDamage({required TerminalEngine engine}) =>
+    RustLib.instance.api.crateApiTerminalEngineTakeDamage(engine: engine);
+
+List<EngineEvent> engineTakeEvents({required TerminalEngine engine}) =>
+    RustLib.instance.api.crateApiTerminalEngineTakeEvents(engine: engine);
+
+RenderUpdate engineFullSnapshot({required TerminalEngine engine}) =>
+    RustLib.instance.api.crateApiTerminalEngineFullSnapshot(engine: engine);
 
 void engineResize({
   required TerminalEngine engine,

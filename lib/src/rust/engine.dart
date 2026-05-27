@@ -38,18 +38,34 @@ class CellData {
           flags == other.flags;
 }
 
-class RenderSnapshot {
-  final int rows;
-  final int columns;
+class LineUpdate {
+  final int line;
   final List<CellData> cells;
+
+  const LineUpdate({required this.line, required this.cells});
+
+  @override
+  int get hashCode => line.hashCode ^ cells.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LineUpdate &&
+          runtimeType == other.runtimeType &&
+          line == other.line &&
+          cells == other.cells;
+}
+
+class RenderUpdate {
+  final List<LineUpdate> lines;
+  final bool full;
   final int cursorLine;
   final int cursorCol;
   final bool cursorVisible;
 
-  const RenderSnapshot({
-    required this.rows,
-    required this.columns,
-    required this.cells,
+  const RenderUpdate({
+    required this.lines,
+    required this.full,
     required this.cursorLine,
     required this.cursorCol,
     required this.cursorVisible,
@@ -57,9 +73,8 @@ class RenderSnapshot {
 
   @override
   int get hashCode =>
-      rows.hashCode ^
-      columns.hashCode ^
-      cells.hashCode ^
+      lines.hashCode ^
+      full.hashCode ^
       cursorLine.hashCode ^
       cursorCol.hashCode ^
       cursorVisible.hashCode;
@@ -67,11 +82,10 @@ class RenderSnapshot {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is RenderSnapshot &&
+      other is RenderUpdate &&
           runtimeType == other.runtimeType &&
-          rows == other.rows &&
-          columns == other.columns &&
-          cells == other.cells &&
+          lines == other.lines &&
+          full == other.full &&
           cursorLine == other.cursorLine &&
           cursorCol == other.cursorCol &&
           cursorVisible == other.cursorVisible;

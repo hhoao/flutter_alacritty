@@ -4,6 +4,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_alacritty/src/rust/api/terminal.dart';
+import 'package:flutter_alacritty/src/rust/event_proxy.dart';
 import 'package:flutter_alacritty/src/rust/frb_generated.dart';
 
 const _libName = 'librust_lib_flutter_alacritty.so';
@@ -44,13 +45,18 @@ void main() {
     );
   });
 
-  test('engine advance + snapshot round-trips through FFI', () {
+  test('advance + take_damage round-trips and DSR emits a PtyWrite event', () async {
     final engine = engineNew(columns: 20, rows: 5);
-    engineAdvance(engine: engine, bytes: 'hi'.codeUnits);
-    final snap = engineSnapshot(engine: engine);
-    expect(snap.columns, 20);
-    expect(snap.rows, 5);
-    expect(String.fromCharCode(snap.cells[0].codepoint), 'h');
-    expect(String.fromCharCode(snap.cells[1].codepoint), 'i');
+
+    await engineAdvance(engine: engine, bytes: 'hi'.codeUnits);
+    final u = await engineTakeDamage(engine: engine);
+    final line0 = u.lines.firstWhere((l) => l.line == 0);
+    expect(String.fromCharCode(line0.cells[0].codepoint), 'h');
+    expect(String.fromCharCode(line0.cells[1].codepoint), 'i');
+
+    // DSR cursor-position query → a PtyWrite event, drained by polling.
+    await engineAdvance(engine: engine, bytes: '\x1b[6n'.codeUnits);
+    final events = engineTakeEvents(engine: engine);
+    expect(events.whereType<EngineEvent_PtyWrite>(), isNotEmpty);
   });
 }

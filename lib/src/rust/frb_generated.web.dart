@@ -11,6 +11,7 @@ import 'api/terminal.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'engine.dart';
+import 'event_proxy.dart';
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 
@@ -60,7 +61,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CellData dco_decode_cell_data(dynamic raw);
 
   @protected
+  EngineEvent dco_decode_engine_event(dynamic raw);
+
+  @protected
+  LineUpdate dco_decode_line_update(dynamic raw);
+
+  @protected
   List<CellData> dco_decode_list_cell_data(dynamic raw);
+
+  @protected
+  List<EngineEvent> dco_decode_list_engine_event(dynamic raw);
+
+  @protected
+  List<LineUpdate> dco_decode_list_line_update(dynamic raw);
 
   @protected
   List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
@@ -69,7 +82,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
-  RenderSnapshot dco_decode_render_snapshot(dynamic raw);
+  RenderUpdate dco_decode_render_update(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -120,7 +133,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CellData sse_decode_cell_data(SseDeserializer deserializer);
 
   @protected
+  EngineEvent sse_decode_engine_event(SseDeserializer deserializer);
+
+  @protected
+  LineUpdate sse_decode_line_update(SseDeserializer deserializer);
+
+  @protected
   List<CellData> sse_decode_list_cell_data(SseDeserializer deserializer);
+
+  @protected
+  List<EngineEvent> sse_decode_list_engine_event(SseDeserializer deserializer);
+
+  @protected
+  List<LineUpdate> sse_decode_list_line_update(SseDeserializer deserializer);
 
   @protected
   List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
@@ -129,7 +154,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
-  RenderSnapshot sse_decode_render_snapshot(SseDeserializer deserializer);
+  RenderUpdate sse_decode_render_update(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -187,7 +212,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_cell_data(CellData self, SseSerializer serializer);
 
   @protected
+  void sse_encode_engine_event(EngineEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_line_update(LineUpdate self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_cell_data(List<CellData> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_engine_event(
+    List<EngineEvent> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_line_update(
+    List<LineUpdate> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
@@ -199,10 +242,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_render_snapshot(
-    RenderSnapshot self,
-    SseSerializer serializer,
-  );
+  void sse_encode_render_update(RenderUpdate self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);
