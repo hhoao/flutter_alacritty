@@ -16,7 +16,14 @@ class TerminalEngineClient {
   })  : _binding = binding,
         _grid = grid,
         _schedule = schedule ??
-            ((cb) => SchedulerBinding.instance.addPostFrameCallback((_) => cb()));
+            ((cb) {
+              final binding = SchedulerBinding.instance;
+              binding.addPostFrameCallback((_) => cb());
+              // A post-frame callback only fires if a frame is actually produced.
+              // Request one so sporadic output/input (e.g. a single keystroke's
+              // echo) refreshes even when the UI is otherwise idle.
+              binding.scheduleFrame();
+            });
 
   final EngineBinding _binding;
   final MirrorGrid _grid;
@@ -44,10 +51,7 @@ class TerminalEngineClient {
     final batch = _buf.takeBytes();
     try {
       final update = await _binding.advanceAndTakeDamage(batch);
-      _grid.apply(update);
-      // apply() notifies repaint: grid, but that can run after the current frame
-      // from an async FRB completion; ensure a frame is queued on idle UI.
-      SchedulerBinding.instance.scheduleFrame();
+      _grid.apply(update); // notifies repaint: grid → schedules the paint frame
       _binding.pumpEvents(); // route PtyWrite/Title/Bell/Clipboard for this batch
     } finally {
       _advancing = false;
