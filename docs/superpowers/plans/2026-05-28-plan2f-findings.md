@@ -111,6 +111,13 @@ Environment: `DISPLAY=:0` (display available).
   clicking. Initially mis-deferred as one-frame/cosmetic; it is not (the engine never re-sends
   untouched rows). Fixed: `MirrorGrid({defaultFg, defaultBg})` (v1 values as defaults) fed the
   configured colors by `TerminalScreen`; regression test in `mirror_grid_test.dart`.
+- **Line-height alignment ("行距打磨", in 2F scope) — user-reported, fixed.** Pre-existing v1
+  behavior (glyph/metrics/box files byte-identical to main): glyphs were laid out at their natural
+  height and drawn at the cell top while box-drawing fills the full cell, so text rode high and
+  didn't align with box-bordered prompts; the uniform themed background made it obvious. Fixed by
+  laying out each glyph into a cell-height line box with a forced strut (`GlyphCache.lineHeight` +
+  `StrutStyle(forceStrutHeight: true)`), giving every glyph (ASCII/CJK/fallback) one shared baseline
+  that fills the cell. Fed from `_config.font.lineHeight`. User-verified aligned.
 - **Left as deferred:** cursor out-of-bounds fallback color (`terminal_painter.dart`) — only the
   degenerate sub-frame where the cursor sits outside the grid; not a themeable surface.
 - **Flake note:** one isolated test failure was seen once during this pass, then 4 consecutive clean

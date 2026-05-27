@@ -64,6 +64,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     fontFamilyFallback: _config.font.fallback,
     fontSize: _config.font.size,
     cellWidth: _metrics.width,
+    lineHeight: _config.font.lineHeight,
   );
 
   late final MirrorGrid _grid = MirrorGrid(

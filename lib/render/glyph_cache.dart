@@ -9,6 +9,7 @@ class GlyphCache {
     required this.fontSize,
     required this.cellWidth,
     this.fontFamilyFallback = const [],
+    this.lineHeight = 1.0,
     this.maxEntries = 4096,
     this.maxBuildsPerFrame = 128,
   });
@@ -17,6 +18,12 @@ class GlyphCache {
   final List<String> fontFamilyFallback;
   final double fontSize;
   final double cellWidth;
+
+  /// Line-height multiplier matching the cell metrics. A forced strut of this
+  /// height makes every glyph (ASCII, CJK, fallback fonts) share one baseline
+  /// and fill the cell box, so text aligns with full-cell box-drawing glyphs
+  /// instead of riding high in an over-tall cell.
+  final double lineHeight;
   final int maxEntries;
 
   /// Caps synchronous paragraph layout per frame so first paint cannot freeze the UI.
@@ -59,6 +66,13 @@ class GlyphCache {
     final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
       fontFamily: fontFamily,
       fontSize: fontSize,
+      height: lineHeight,
+      strutStyle: ui.StrutStyle(
+        fontFamily: fontFamily,
+        fontSize: fontSize,
+        height: lineHeight,
+        forceStrutHeight: true,
+      ),
     ))
       ..pushStyle(ui.TextStyle(
         color: ui.Color(0xFF000000 | (fg & 0xFFFFFF)),
