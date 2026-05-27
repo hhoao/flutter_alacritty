@@ -48,3 +48,14 @@ void engineResize({
   columns: columns,
   rows: rows,
 );
+
+Future<void> engineScrollLines({
+  required TerminalEngine engine,
+  required int delta,
+}) => RustLib.instance.api.crateApiTerminalEngineScrollLines(
+  engine: engine,
+  delta: delta,
+);
+
+Future<void> engineScrollToBottom({required TerminalEngine engine}) =>
+    RustLib.instance.api.crateApiTerminalEngineScrollToBottom(engine: engine);

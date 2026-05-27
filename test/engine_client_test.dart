@@ -43,6 +43,10 @@ class _FakeBinding implements EngineBinding {
         cursorVisible: true,
       );
   @override
+  Future<void> scrollLines(int delta) async {}
+  @override
+  Future<void> scrollToBottom() async {}
+  @override
   void dispose() {}
 }
 

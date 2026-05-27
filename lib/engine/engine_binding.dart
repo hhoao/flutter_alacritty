@@ -19,6 +19,8 @@ abstract class EngineBinding {
   void resize(int columns, int rows);
   /// Full viewport snapshot (sync). Used after resize when damage is `Full`.
   GridUpdate fullSnapshot();
+  Future<void> scrollLines(int delta);
+  Future<void> scrollToBottom();
   void dispose();
 }
 
@@ -76,6 +78,13 @@ class FrbEngineBinding implements EngineBinding {
       engineResize(engine: _engine, columns: columns, rows: rows);
 
   @override
+  Future<void> scrollLines(int delta) =>
+      engineScrollLines(engine: _engine, delta: delta);
+
+  @override
+  Future<void> scrollToBottom() => engineScrollToBottom(engine: _engine);
+
+  @override
   void dispose() {}
 
   GridUpdate _toGridUpdate(RenderUpdate u) => GridUpdate(
@@ -90,6 +99,7 @@ class FrbEngineBinding implements EngineBinding {
         cursorShape: u.cursorShape,
         cursorBlinking: u.cursorBlinking,
         modeFlags: u.modeFlags,
+        displayOffset: u.displayOffset,
         lines: u.lines.map(_lineCells).toList(),
       );
 

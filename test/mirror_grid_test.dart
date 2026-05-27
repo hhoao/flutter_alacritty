@@ -36,6 +36,15 @@ void main() {
     expect(g.cursorRow, 1);
   });
 
+  test('carries display offset', () {
+    final g = MirrorGrid();
+    g.apply(GridUpdate(
+      full: true, rows: 1, columns: 1, lines: [row(0, ' ')],
+      cursorRow: 0, cursorCol: 0, cursorVisible: true, displayOffset: 4,
+    ));
+    expect(g.displayOffset, 4);
+  });
+
   test('carries mode flags', () {
     final g = MirrorGrid();
     g.apply(GridUpdate(

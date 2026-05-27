@@ -28,6 +28,7 @@ pub async fn engine_take_damage(engine: &mut TerminalEngine) -> RenderUpdate {
             cursor_shape: 0,
             cursor_blinking: false,
             mode_flags: 0,
+            display_offset: 0,
         }
     })
 }
@@ -58,4 +59,12 @@ pub fn engine_full_snapshot(engine: &TerminalEngine) -> RenderUpdate {
 #[frb(sync)]
 pub fn engine_resize(engine: &mut TerminalEngine, columns: u16, rows: u16) {
     engine.resize(columns, rows);
+}
+
+pub async fn engine_scroll_lines(engine: &mut TerminalEngine, delta: i32) {
+    engine.scroll_lines(delta);
+}
+
+pub async fn engine_scroll_to_bottom(engine: &mut TerminalEngine) {
+    engine.scroll_to_bottom();
 }

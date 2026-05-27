@@ -93,5 +93,15 @@ class TerminalEngineClient {
     _grid.apply(_binding.fullSnapshot());
   }
 
+  Future<void> scrollLines(int delta) async {
+    await _binding.scrollLines(delta);
+    _grid.apply(await _binding.takeDamage()); // scrolled -> full snapshot
+    SchedulerBinding.instance.scheduleFrame();
+  }
+
+  Future<void> scrollToBottom() async {
+    await _binding.scrollToBottom();
+  }
+
   void dispose() => _binding.dispose();
 }
