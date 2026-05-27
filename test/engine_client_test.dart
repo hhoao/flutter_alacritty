@@ -6,6 +6,9 @@ import 'package:flutter_alacritty/render/mirror_grid.dart';
 
 class _FakeBinding implements EngineBinding {
   int advanceCalls = 0;
+  int resizeCalls = 0;
+  int lastResizeCols = 0;
+  int lastResizeRows = 0;
   final List<int> totalBytes = [];
   @override
   Future<void> advance(Uint8List bytes) async {
@@ -24,7 +27,21 @@ class _FakeBinding implements EngineBinding {
   @override
   void pumpEvents() {}
   @override
-  void resize(int columns, int rows) {}
+  void resize(int columns, int rows) {
+    resizeCalls++;
+    lastResizeCols = columns;
+    lastResizeRows = rows;
+  }
+  @override
+  GridUpdate fullSnapshot() => GridUpdate(
+        full: true,
+        rows: lastResizeRows,
+        columns: lastResizeCols,
+        lines: const [],
+        cursorRow: 0,
+        cursorCol: 0,
+        cursorVisible: true,
+      );
   @override
   void dispose() {}
 }
@@ -53,5 +70,20 @@ void main() {
 
     expect(binding.advanceCalls, 1);
     expect(binding.totalBytes, [1, 2, 3, 4, 5]);
+  });
+
+  test('resize applies full snapshot dimensions to grid', () {
+    final binding = _FakeBinding();
+    final grid = MirrorGrid();
+    grid.initializeEmpty(5, 20);
+    final client = TerminalEngineClient(binding: binding, grid: grid);
+
+    client.resize(40, 10);
+
+    expect(binding.resizeCalls, 1);
+    expect(binding.lastResizeCols, 40);
+    expect(binding.lastResizeRows, 10);
+    expect(grid.rows, 10);
+    expect(grid.columns, 40);
   });
 }

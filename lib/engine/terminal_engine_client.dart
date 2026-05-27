@@ -55,7 +55,12 @@ class TerminalEngineClient {
     if (_buf.isNotEmpty) _scheduleDrain();
   }
 
-  void resize(int columns, int rows) => _binding.resize(columns, rows);
+  void resize(int columns, int rows) {
+    _binding.resize(columns, rows);
+    // Engine resize sets TermDamage::Full; sync snapshot keeps MirrorGrid in sync.
+    _grid.apply(_binding.fullSnapshot());
+    SchedulerBinding.instance.scheduleFrame();
+  }
 
   void dispose() => _binding.dispose();
 }

@@ -17,6 +17,8 @@
 
 ## Manual acceptance checklist (Task 10 / spec §7)
 
+**Automated gates (2026-05-27 code-review pass):** `cargo test`, `flutter test`, and `flutter analyze lib test` pass after resize/title/FFI fixes. Interactive rows below remain **USER** unless you run `flutter run -d linux` locally.
+
 Run locally:
 
 ```bash
@@ -29,7 +31,7 @@ flutter run -d linux
 | `cat` large file / `yes \| head -n 100000` — responsive, Ctrl-C works | **USER** | Coalescing + async advance implemented; perf subjective |
 | `vim` scroll + `htop` — smooth, no jank | **USER** | Glyph cache + damage path in place; not profiled here |
 | DSR / query path (`printf '\e[6n'…` or vim DA) | **AUTO** | Rust `dsr_emits_pty_write` + `engine_bindings_test` (FRB round-trip + `EngineEvent_PtyWrite`); live PTY loop **USER** |
-| `printf '\e]0;hi\a'` — window title "hi" | **USER** | Wired: `EventProxy` → `engine_take_events` → `FrbEngineBinding.pumpEvents` → `_title` `ValueNotifier` (UI title bar not yet bound to window chrome — verify visually) |
+| `printf '\e]0;hi\a'` — window title "hi" | **USER** | Wired: events → `MyApp._title` → `MaterialApp.title` + `Title` widget (GTK header bar may still show static title from `linux/runner` — verify visually) |
 | `printf '\a'` — bell hook | **USER** | `_flashBell()` is a no-op stub (Plan A: hook present; visual flash → sub-project C) |
 | OSC52 copy → system clipboard | **USER** | `ClipboardStore` → `Clipboard.setData` wired; needs desktop session with clipboard |
 | Full-width ruler — right edge alignment | **USER** | `CellMetrics.measure` uses sub-pixel `W×20` width; cols = `floor(maxWidth/cw)` — ruler confirms artifact gone or documents deferred wrap |
@@ -82,7 +84,7 @@ flutter run -d linux
 | Mutable `MirrorGrid` + `GlyphCache` + painter | **Done** |
 | Cols sub-pixel measurement | **Done**; ruler verification **USER** |
 | Panic isolation | **Done** (advance swallows panic; damage returns empty update) |
-| Max bytes-per-advance cap (spec §3) | **Not implemented** — coalescing + one batch/frame only; add cap if latency spikes on huge single reads |
+| Max bytes-per-advance cap (spec §3) | **Deferred** — coalescing + one batch/frame only; add cap if profiling shows latency spikes on huge single reads |
 | `engine_mode_flags` (spec §4) | **Deferred → B** |
 
 ## Carry-over for sub-projects B / C / D / E
@@ -111,5 +113,6 @@ flutter run -d linux
 ## Rendering / integration notes
 
 - **Font:** DejaVu Sans Mono + fallback (from Task 1 tracer fix), shared by metrics, glyph cache, and painter.
-- **Title:** `_title` notifier updated; confirm `MaterialApp`/window title binding if title bar should change OS window title.
+- **Title:** `MaterialApp.title` + `Title` widget bound to shared `ValueNotifier`; GNOME header bar may need native runner sync later.
+- **Resize:** `TerminalEngineClient.resize` applies `fullSnapshot()` after `engine_resize` so `MirrorGrid` matches new viewport (`engine_client_test`).
 - **Bell:** Hook only — no visual feedback yet.

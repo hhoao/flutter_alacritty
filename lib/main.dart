@@ -8,13 +8,31 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final ValueNotifier<String> _title = ValueNotifier('flutter_alacritty');
+
+  @override
+  void dispose() {
+    _title.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: TerminalScreen(),
+    return ValueListenableBuilder<String>(
+      valueListenable: _title,
+      builder: (context, title, _) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: title,
+        home: TerminalScreen(title: _title),
+      ),
     );
   }
 }

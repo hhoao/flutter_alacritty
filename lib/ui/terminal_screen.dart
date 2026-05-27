@@ -14,7 +14,10 @@ import '../render/mirror_grid.dart';
 import '../render/terminal_painter.dart';
 
 class TerminalScreen extends StatefulWidget {
-  const TerminalScreen({super.key});
+  const TerminalScreen({required this.title, super.key});
+
+  final ValueNotifier<String> title;
+
   @override
   State<TerminalScreen> createState() => _TerminalScreenState();
 }
@@ -30,7 +33,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   final MirrorGrid _grid = MirrorGrid();
   final FocusNode _focus = FocusNode();
-  final ValueNotifier<String> _title = ValueNotifier('flutter_alacritty');
 
   TerminalEngineClient? _client;
   PtyBackend? _pty;
@@ -55,7 +57,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       columns: cols,
       rows: rows,
       onPtyWrite: pty.write,
-      onTitle: (t) => _title.value = t,
+      onTitle: (t) => widget.title.value = t,
       onBell: _flashBell,
       onClipboard: (t) => Clipboard.setData(ClipboardData(text: t)),
     );
@@ -85,41 +87,48 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _pty?.kill();
     _client?.dispose();
     _grid.dispose();
-    _title.dispose();
     _focus.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF181818),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final cols = (constraints.maxWidth / _metrics.width).floor().clamp(1, 1000);
-          final rows = (constraints.maxHeight / _metrics.height).floor().clamp(1, 1000);
-          WidgetsBinding.instance.addPostFrameCallback((_) => _ensureStarted(cols, rows));
-          return Focus(
-            focusNode: _focus,
-            autofocus: true,
-            onKeyEvent: _onKey,
-            child: GestureDetector(
-              onTap: _focus.requestFocus,
-              child: ListenableBuilder(
-                listenable: _grid,
-                builder: (context, _) => CustomPaint(
-                  size: Size.infinite,
-                  painter: TerminalPainter(
-                    grid: _grid,
-                    glyphs: _glyphs,
-                    cellWidth: _metrics.width,
-                    cellHeight: _metrics.height,
+    return ValueListenableBuilder<String>(
+      valueListenable: widget.title,
+      builder: (context, title, child) => Title(
+        title: title,
+        color: Colors.transparent,
+        child: child!,
+      ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFF181818),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final cols = (constraints.maxWidth / _metrics.width).floor().clamp(1, 1000);
+            final rows = (constraints.maxHeight / _metrics.height).floor().clamp(1, 1000);
+            WidgetsBinding.instance.addPostFrameCallback((_) => _ensureStarted(cols, rows));
+            return Focus(
+              focusNode: _focus,
+              autofocus: true,
+              onKeyEvent: _onKey,
+              child: GestureDetector(
+                onTap: _focus.requestFocus,
+                child: ListenableBuilder(
+                  listenable: _grid,
+                  builder: (context, _) => CustomPaint(
+                    size: Size.infinite,
+                    painter: TerminalPainter(
+                      grid: _grid,
+                      glyphs: _glyphs,
+                      cellWidth: _metrics.width,
+                      cellHeight: _metrics.height,
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

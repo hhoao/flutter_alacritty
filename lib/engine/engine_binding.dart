@@ -17,6 +17,8 @@ abstract class EngineBinding {
   /// Kept on the binding so the client stays free of FRB event types.
   void pumpEvents();
   void resize(int columns, int rows);
+  /// Full viewport snapshot (sync). Used after resize when damage is `Full`.
+  GridUpdate fullSnapshot();
   void dispose();
 }
 
@@ -66,6 +68,7 @@ class FrbEngineBinding implements EngineBinding {
     }
   }
 
+  @override
   GridUpdate fullSnapshot() => _toGridUpdate(engineFullSnapshot(engine: _engine));
 
   @override
