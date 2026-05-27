@@ -18,10 +18,33 @@ import '../render/glyph_cache.dart';
 import '../render/mirror_grid.dart';
 import '../render/terminal_painter.dart';
 
+typedef PtyFactory = PtyBackend Function({
+  required int rows,
+  required int columns,
+});
+
+typedef EngineFactory = EngineBinding Function({
+  required int columns,
+  required int rows,
+  required void Function(Uint8List) onPtyWrite,
+  required void Function(String) onTitle,
+  required void Function() onBell,
+  required void Function(String) onClipboard,
+});
+
+enum TermStatus { running, exited, error }
+
 class TerminalScreen extends StatefulWidget {
-  const TerminalScreen({required this.title, super.key});
+  const TerminalScreen({
+    required this.title,
+    this.ptyFactory,
+    this.engineFactory,
+    super.key,
+  });
 
   final ValueNotifier<String> title;
+  final PtyFactory? ptyFactory;
+  final EngineFactory? engineFactory;
 
   @override
   State<TerminalScreen> createState() => _TerminalScreenState();
@@ -60,13 +83,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
   DateTime _lastClick = DateTime.fromMillisecondsSinceEpoch(0);
   bool _selecting = false;
   String _primary = '';
+  TermStatus _status = TermStatus.running;
+  int? _exitCode;
+  String? _errorMessage;
 
   // Repaint is driven by CustomPaint(repaint: _grid): MirrorGrid.apply() notifies,
   // RenderCustomPaint marks needs-paint, and the client requests a frame when it
   // schedules a drain — so no per-frame setState rebuild is needed.
 
   void _ensureStarted(int cols, int rows) {
-    if (_client != null) {
+    if (_status == TermStatus.running && _client != null) {
       if (cols != _cols || rows != _rows) {
         _cols = cols;
         _rows = rows;
@@ -78,22 +104,71 @@ class _TerminalScreenState extends State<TerminalScreen> {
     }
     _cols = cols;
     _rows = rows;
+    if (_status == TermStatus.running && _client == null) {
+      _start(cols, rows);
+    }
+  }
 
-    final pty = FlutterPtyBackend(rows: rows, columns: cols);
-    final binding = FrbEngineBinding(
-      columns: cols,
-      rows: rows,
-      onPtyWrite: pty.write,
-      onTitle: (t) => widget.title.value = t,
-      onBell: _flashBell,
-      onClipboard: (t) => Clipboard.setData(ClipboardData(text: t)),
-    );
+  void _start(int cols, int rows) {
+    try {
+      final pty = (widget.ptyFactory ??
+          ({required int rows, required int columns}) =>
+              FlutterPtyBackend(rows: rows, columns: columns))(
+        rows: rows,
+        columns: cols,
+      );
+      final binding = (widget.engineFactory ?? FrbEngineBinding.new)(
+        columns: cols,
+        rows: rows,
+        onPtyWrite: pty.write,
+        onTitle: (t) => widget.title.value = t,
+        onBell: _flashBell,
+        onClipboard: (t) => Clipboard.setData(ClipboardData(text: t)),
+      );
+      _pty = pty;
+      _client = TerminalEngineClient(binding: binding, grid: _grid);
+      _grid.initializeEmpty(rows, cols);
+      _outputSub = pty.output.listen(
+        _client!.feed,
+        onDone: () => _exitIfCurrent(pty, null),
+      );
+      pty.exitCode.then((code) => _exitIfCurrent(pty, code));
+      _focus.addListener(_reportFocus);
+      _status = TermStatus.running;
+      _exitCode = null;
+      _errorMessage = null;
+    } catch (e) {
+      _status = TermStatus.error;
+      _errorMessage = '$e';
+    }
+    if (mounted) setState(() {});
+  }
 
-    _pty = pty;
-    _client = TerminalEngineClient(binding: binding, grid: _grid);
-    _grid.initializeEmpty(rows, cols);
-    _outputSub = pty.output.listen(_client!.feed);
-    _focus.addListener(_reportFocus);
+  void _exitIfCurrent(PtyBackend p, int? code) {
+    if (!identical(_pty, p)) return;
+    _outputSub?.cancel();
+    _outputSub = null;
+    _focus.removeListener(_reportFocus);
+    _pty?.kill();
+    _pty = null;
+    _client?.dispose();
+    _client = null;
+    _status = TermStatus.exited;
+    _exitCode = code;
+    if (mounted) setState(() {});
+  }
+
+  void _restart() {
+    _focus.removeListener(_reportFocus);
+    _outputSub?.cancel();
+    _outputSub = null;
+    _pty?.kill();
+    _pty = null;
+    _client?.dispose();
+    _client = null;
+    _exitCode = null;
+    _errorMessage = null;
+    _start(_cols, _rows);
   }
 
   void _flashBell() {
@@ -102,6 +177,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (_status != TermStatus.running) {
+      _restart();
+      return KeyEventResult.handled;
+    }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
@@ -218,6 +297,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
             onKeyEvent: _onKey,
             child: Listener(
               onPointerDown: (e) {
+                if (_status != TermStatus.running) {
+                  _restart();
+                  return;
+                }
                 _focus.requestFocus();
                 final localSelect =
                     !anyMouse(_grid.modeFlags) || HardwareKeyboard.instance.isShiftPressed;
@@ -285,15 +368,39 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 }
                 _client?.scrollLines(up ? 3 : -3);
               },
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: TerminalPainter(
-                  grid: _grid,
-                  glyphs: _glyphs,
-                  cellWidth: _metrics.width,
-                  cellHeight: _metrics.height,
-                  blinkOn: _blinkOn,
-                ),
+              child: Stack(
+                children: [
+                  CustomPaint(
+                    size: Size.infinite,
+                    painter: TerminalPainter(
+                      grid: _grid,
+                      glyphs: _glyphs,
+                      cellWidth: _metrics.width,
+                      cellHeight: _metrics.height,
+                      blinkOn: _blinkOn,
+                    ),
+                  ),
+                  if (_status != TermStatus.running)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              _status == TermStatus.error
+                                  ? 'failed to start: ${_errorMessage ?? ''} — press any key to retry'
+                                  : 'process exited${_exitCode != null ? ' ($_exitCode)' : ''} — press any key to restart',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFFCCCCCC),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           );
