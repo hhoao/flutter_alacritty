@@ -39,6 +39,18 @@ class _TerminalScreenState extends State<TerminalScreen> {
   StreamSubscription<Uint8List>? _outputSub;
   int _cols = 0, _rows = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    // Async FRB drain updates the grid off the build phase; repaint: grid alone is
+    // not reliable here (unlike sync main). setState matches a proven rebuild path.
+    _grid.addListener(_onGridChanged);
+  }
+
+  void _onGridChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _ensureStarted(int cols, int rows) {
     if (_client != null) {
       if (cols != _cols || rows != _rows) {
@@ -83,6 +95,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   @override
   void dispose() {
+    _grid.removeListener(_onGridChanged);
     _outputSub?.cancel();
     _pty?.kill();
     _client?.dispose();
@@ -106,16 +119,13 @@ class _TerminalScreenState extends State<TerminalScreen> {
             onKeyEvent: _onKey,
             child: GestureDetector(
               onTap: _focus.requestFocus,
-              child: ListenableBuilder(
-                listenable: _grid,
-                builder: (context, _) => CustomPaint(
-                  size: Size.infinite,
-                  painter: TerminalPainter(
-                    grid: _grid,
-                    glyphs: _glyphs,
-                    cellWidth: _metrics.width,
-                    cellHeight: _metrics.height,
-                  ),
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: TerminalPainter(
+                  grid: _grid,
+                  glyphs: _glyphs,
+                  cellWidth: _metrics.width,
+                  cellHeight: _metrics.height,
                 ),
               ),
             ),

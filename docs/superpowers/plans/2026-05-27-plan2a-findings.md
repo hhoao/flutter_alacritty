@@ -102,13 +102,13 @@ flutter run -d linux
 
 **Symptom:** Terminal grid updated in memory but `CustomPaint` did not repaint until app hide/resume (lifecycle forced a frame).
 
-**Root causes:**
+**Root causes (partial fixes f151a36, 637f4d2):**
 
-1. **Missing frame after async apply** — `TerminalEngineClient._drain` completes `advanceAndTakeDamage` on a microtask after the post-frame callback. `MirrorGrid.notifyListeners()` marks the painter dirty, but on an idle UI no further frame was guaranteed without `SchedulerBinding.scheduleFrame()`.
-2. **Partial damage resized the grid** — `FrbEngineBinding._toGridUpdate` sets `rows` to `max(damaged line)+1`, not viewport height. `MirrorGrid.apply` treated any `rows` mismatch as a resize and could shrink the grid (e.g. one-line damage → 1-row mirror), breaking incremental updates after `initializeEmpty`.
-3. **`shouldRepaint` ignored content** — New `TerminalPainter` each build compared only `grid` identity; mutable cell data changes did not force repaint when the `repaint:` listenable path was insufficient.
+1. **Missing frame after async apply** — `TerminalEngineClient._drain` completes on a microtask; `scheduleFrame()` after `apply()` is necessary but not sufficient alone.
+2. **Partial damage resized the grid** — `FrbEngineBinding._toGridUpdate` sets `rows` to `max(damaged line)+1`, not viewport height. `MirrorGrid.apply` now resizes only when `full: true`.
+3. **`repaint:` + `ListenableBuilder` insufficient for async path** — Main’s tracer bullet updates the grid synchronously on the PTY stream; `CustomPaint` + `repaint: grid` is enough there. Plan 2A applies damage asynchronously; `notifyListeners()` + `scheduleFrame()` did not reliably repaint while the window stayed focused. `ListenableBuilder` around `CustomPaint` still failed in practice (same symptom after 637f4d2).
 
-**Fix:** `scheduleFrame()` after `_grid.apply()`; `ListenableBuilder` on the paint subtree; `MirrorGrid.generation` in `shouldRepaint`; partial `apply` resizes only when `full: true`.
+**Fix:** `TerminalScreen` listens to `MirrorGrid` and calls `setState` on every apply (proven rebuild path). Keep `scheduleFrame()` after apply, `MirrorGrid.generation` in `shouldRepaint`, stable `ValueListenableBuilder` `child: TerminalScreen` for title updates, and `CustomPaint` + `repaint: grid` like main (no `ListenableBuilder` wrapper).
 
 ## Rendering / integration notes
 

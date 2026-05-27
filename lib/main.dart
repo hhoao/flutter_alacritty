@@ -26,10 +26,9 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    // `child` keeps [TerminalScreen] (and its ListenableBuilder paint subtree)
-    // stable across title updates. Rebuilding home on every title change — after
-    // pumpEvents in the same drain as grid.apply — recreates ListenableBuilder
-    // and drops the dirty mark from notifyListeners (stale until lifecycle).
+    // `child` keeps [TerminalScreen] stable across title updates. Rebuilding home
+    // on every title change — after pumpEvents in the same drain as grid.apply —
+    // would reset paint state and drop pending repaints until lifecycle.
     return ValueListenableBuilder<String>(
       valueListenable: _title,
       builder: (context, title, child) => MaterialApp(
