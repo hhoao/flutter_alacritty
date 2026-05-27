@@ -26,6 +26,7 @@ void main() {
           codepoints: Int32List.fromList('ab'.codeUnits),
           fg: Int32List.fromList([0xD8D8D8, 0xD8D8D8]),
           bg: Int32List.fromList([0x181818, 0x181818]),
+          flags: Uint16List.fromList([0, 0]),
         ),
       ],
       cursorRow: 0,
