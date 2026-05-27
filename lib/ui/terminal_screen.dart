@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../engine/engine_binding.dart';
 import '../engine/terminal_engine_client.dart';
 import '../input/key_input.dart';
+import '../input/mouse_input.dart';
 import '../pty/flutter_pty_backend.dart';
 import '../pty/pty_backend.dart';
 import '../render/cell_metrics.dart';
@@ -107,6 +109,25 @@ class _TerminalScreenState extends State<TerminalScreen> {
     return KeyEventResult.handled;
   }
 
+  void _reportMouse(Offset local, int button, MouseAction action) {
+    if (_client == null) return;
+    final col = (local.dx / _metrics.width).floor().clamp(0, _cols - 1) + 1;
+    final row = (local.dy / _metrics.height).floor().clamp(0, _rows - 1) + 1;
+    final hw = HardwareKeyboard.instance;
+    final bytes = encodeMouse(button, action, col, row,
+        shift: hw.isShiftPressed,
+        alt: hw.isAltPressed,
+        ctrl: hw.isControlPressed,
+        modeFlags: _grid.modeFlags);
+    if (bytes != null) _pty?.write(bytes);
+  }
+
+  int _btn(int buttons) => (buttons & kSecondaryButton) != 0
+      ? 2
+      : (buttons & kMiddleMouseButton) != 0
+          ? 1
+          : 0;
+
   @override
   void dispose() {
     _blinkTimer?.cancel();
@@ -132,8 +153,24 @@ class _TerminalScreenState extends State<TerminalScreen> {
             focusNode: _focus,
             autofocus: true,
             onKeyEvent: _onKey,
-            child: GestureDetector(
-              onTap: _focus.requestFocus,
+            child: Listener(
+              onPointerDown: (e) {
+                _focus.requestFocus();
+                _reportMouse(e.localPosition, _btn(e.buttons), MouseAction.down);
+              },
+              onPointerMove: (e) =>
+                  _reportMouse(e.localPosition, _btn(e.buttons), MouseAction.move),
+              onPointerUp: (e) =>
+                  _reportMouse(e.localPosition, 0, MouseAction.up),
+              onPointerSignal: (e) {
+                if (e is PointerScrollEvent) {
+                  _reportMouse(
+                    e.localPosition,
+                    0,
+                    e.scrollDelta.dy < 0 ? MouseAction.scrollUp : MouseAction.scrollDown,
+                  );
+                }
+              },
               child: CustomPaint(
                 size: Size.infinite,
                 painter: TerminalPainter(
