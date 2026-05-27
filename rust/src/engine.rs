@@ -1,6 +1,6 @@
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::index::Point;
+use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor, Rgb};
@@ -15,13 +15,25 @@ pub struct CellData {
 }
 
 #[derive(Clone, Debug)]
-pub struct RenderSnapshot {
-    pub rows: u16,
-    pub columns: u16,
-    pub cells: Vec<CellData>, // row-major, len == rows*columns
-    pub cursor_line: u16,
-    pub cursor_col: u16,
+pub struct LineUpdate {
+    pub line: u32,
+    pub cells: Vec<CellData>,
+}
+
+#[derive(Clone, Debug)]
+pub struct RenderUpdate {
+    pub lines: Vec<LineUpdate>,
+    pub full: bool,
+    pub cursor_line: u32,
+    pub cursor_col: u32,
     pub cursor_visible: bool,
+}
+
+impl RenderUpdate {
+    /// Column count inferred from the first line (test/diagnostic helper).
+    pub fn columns(&self) -> usize {
+        self.lines.first().map(|l| l.cells.len()).unwrap_or(0)
+    }
 }
 
 // Bit layout for CellData.flags (a subset for the tracer bullet).
@@ -175,41 +187,48 @@ impl TerminalEngine {
         self.term.resize(size);
     }
 
-    pub fn snapshot(&self) -> RenderSnapshot {
-        let cols = self.term.columns() as u16;
-        let rows = self.term.screen_lines() as u16;
-        let mut cells = vec![
-            CellData {
-                codepoint: ' ' as u32,
-                fg: DEFAULT_FG,
-                bg: DEFAULT_BG,
-                flags: 0
-            };
-            (cols as usize) * (rows as usize)
-        ];
-        for indexed in self.term.grid().display_iter() {
-            let Point { line, column } = indexed.point;
-            let row = line.0; // display_iter yields viewport rows 0..rows-1
-            if row < 0 || row as u16 >= rows || column.0 as u16 >= cols {
-                continue;
-            }
-            let cell = indexed.cell;
-            let idx = (row as usize) * (cols as usize) + column.0;
-            cells[idx] = CellData {
+    /// Cells of a single viewport row (display_offset is 0 in Plan 2A — no scrollback).
+    fn line_cells(&self, row: usize) -> Vec<CellData> {
+        let grid = self.term.grid();
+        let cols = grid.columns();
+        let mut cells = Vec::with_capacity(cols);
+        let g_line = &grid[Line(row as i32)];
+        for col in 0..cols {
+            let cell = &g_line[Column(col)];
+            cells.push(CellData {
                 codepoint: cell.c as u32,
                 fg: resolve_color(cell.fg, true),
                 bg: resolve_color(cell.bg, false),
                 flags: map_flags(cell.flags),
-            };
+            });
         }
+        cells
+    }
+
+    fn cursor_fields(&self) -> (u32, u32, bool) {
         let cursor = self.term.grid().cursor.point;
-        RenderSnapshot {
-            rows,
-            columns: cols,
-            cells,
-            cursor_line: cursor.line.0.max(0) as u16,
-            cursor_col: cursor.column.0 as u16,
-            cursor_visible: self.term.mode().contains(TermMode::SHOW_CURSOR),
+        (
+            cursor.line.0.max(0) as u32,
+            cursor.column.0 as u32,
+            self.term.mode().contains(TermMode::SHOW_CURSOR),
+        )
+    }
+
+    pub fn full_snapshot(&self) -> RenderUpdate {
+        let rows = self.term.screen_lines();
+        let lines = (0..rows)
+            .map(|row| LineUpdate {
+                line: row as u32,
+                cells: self.line_cells(row),
+            })
+            .collect();
+        let (cursor_line, cursor_col, cursor_visible) = self.cursor_fields();
+        RenderUpdate {
+            lines,
+            full: true,
+            cursor_line,
+            cursor_col,
+            cursor_visible,
         }
     }
 }
@@ -218,49 +237,55 @@ impl TerminalEngine {
 mod tests {
     use super::*;
 
-    fn cell_at(s: &RenderSnapshot, row: u16, col: u16) -> &CellData {
-        &s.cells[(row as usize) * (s.columns as usize) + (col as usize)]
+    fn engine(cols: u16, rows: u16) -> TerminalEngine {
+        TerminalEngine::new(cols, rows)
+    }
+
+    fn line<'a>(u: &'a RenderUpdate, row: u32) -> &'a LineUpdate {
+        u.lines.iter().find(|l| l.line == row).expect("line present")
+    }
+    fn ch(u: &RenderUpdate, row: u32, col: usize) -> char {
+        char::from_u32(line(u, row).cells[col].codepoint).unwrap()
     }
 
     #[test]
     fn writes_plain_text_into_the_grid() {
-        let mut engine = TerminalEngine::new(20, 5);
-        engine.advance(b"hi".to_vec());
-        let snap = engine.snapshot();
-        assert_eq!(snap.columns, 20);
-        assert_eq!(snap.rows, 5);
-        assert_eq!(char::from_u32(cell_at(&snap, 0, 0).codepoint).unwrap(), 'h');
-        assert_eq!(char::from_u32(cell_at(&snap, 0, 1).codepoint).unwrap(), 'i');
+        let mut e = engine(20, 5);
+        e.advance(b"hi".to_vec());
+        let u = e.full_snapshot();
+        assert_eq!(u.columns(), 20);
+        assert_eq!(u.lines.len(), 5);
+        assert_eq!(ch(&u, 0, 0), 'h');
+        assert_eq!(ch(&u, 0, 1), 'i');
+        assert!(u.full);
     }
 
     #[test]
     fn applies_sgr_foreground_color() {
-        let mut engine = TerminalEngine::new(20, 5);
-        // SGR 31 = red foreground, then 'R'
-        engine.advance(b"\x1b[31mR".to_vec());
-        let snap = engine.snapshot();
-        let c = cell_at(&snap, 0, 0);
+        let mut e = engine(20, 5);
+        e.advance(b"\x1b[31mR".to_vec());
+        let u = e.full_snapshot();
+        let c = &line(&u, 0).cells[0];
         assert_eq!(char::from_u32(c.codepoint).unwrap(), 'R');
-        // Standard ANSI red resolves to 0xCC0000 in our palette.
         assert_eq!(c.fg & 0x00FF_FFFF, 0x00CC_0000);
     }
 
     #[test]
     fn newline_moves_to_next_row() {
-        let mut engine = TerminalEngine::new(20, 5);
-        engine.advance(b"a\r\nb".to_vec());
-        let snap = engine.snapshot();
-        assert_eq!(char::from_u32(cell_at(&snap, 0, 0).codepoint).unwrap(), 'a');
-        assert_eq!(char::from_u32(cell_at(&snap, 1, 0).codepoint).unwrap(), 'b');
+        let mut e = engine(20, 5);
+        e.advance(b"a\r\nb".to_vec());
+        let u = e.full_snapshot();
+        assert_eq!(ch(&u, 0, 0), 'a');
+        assert_eq!(ch(&u, 1, 0), 'b');
     }
 
     #[test]
     fn resize_changes_reported_dimensions() {
-        let mut engine = TerminalEngine::new(20, 5);
-        engine.resize(40, 10);
-        let snap = engine.snapshot();
-        assert_eq!(snap.columns, 40);
-        assert_eq!(snap.rows, 10);
-        assert_eq!(snap.cells.len(), 400);
+        let mut e = engine(20, 5);
+        e.resize(40, 10);
+        let u = e.full_snapshot();
+        assert_eq!(u.columns(), 40);
+        assert_eq!(u.lines.len(), 10);
+        assert_eq!(line(&u, 0).cells.len(), 40);
     }
 }
