@@ -44,6 +44,7 @@ pub const FLAG_ITALIC: u16 = 1 << 1;
 pub const FLAG_UNDERLINE: u16 = 1 << 2;
 pub const FLAG_INVERSE: u16 = 1 << 3;
 pub const FLAG_WIDE: u16 = 1 << 4;
+pub const FLAG_WIDE_SPACER: u16 = 1 << 5;
 
 const DEFAULT_FG: u32 = 0x00D8_D8D8;
 const DEFAULT_BG: u32 = 0x0018_1818;
@@ -148,6 +149,9 @@ fn map_flags(f: Flags) -> u16 {
     }
     if f.contains(Flags::WIDE_CHAR) {
         out |= FLAG_WIDE;
+    }
+    if f.contains(Flags::WIDE_CHAR_SPACER) {
+        out |= FLAG_WIDE_SPACER;
     }
     out
 }
@@ -365,6 +369,21 @@ mod tests {
         let u = e.take_damage();
         assert!(u.full);
         assert_eq!(u.lines.len(), 6);
+    }
+
+    #[test]
+    fn wide_char_sets_wide_and_spacer_flags() {
+        let mut e = engine(20, 5);
+        e.advance("中".as_bytes().to_vec());
+        let u = e.full_snapshot();
+        let row0 = line(&u, 0);
+        assert_eq!(char::from_u32(row0.cells[0].codepoint).unwrap(), '中');
+        assert_ne!(row0.cells[0].flags & FLAG_WIDE, 0, "lead cell must be WIDE_CHAR");
+        assert_ne!(
+            row0.cells[1].flags & FLAG_WIDE_SPACER,
+            0,
+            "the cell after a wide char must be WIDE_CHAR_SPACER"
+        );
     }
 
     #[test]
