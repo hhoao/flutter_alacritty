@@ -7,6 +7,9 @@ abstract class PtyBackend {
   /// Bytes produced by the child process (shell stdout/stderr).
   Stream<Uint8List> get output;
 
+  /// Completes with the child process's exit code when it terminates.
+  Future<int> get exitCode;
+
   /// Send bytes to the child process (stdin).
   void write(Uint8List data);
 

@@ -24,6 +24,9 @@ class FlutterPtyBackend implements PtyBackend {
   Stream<Uint8List> get output => _pty.output;
 
   @override
+  Future<int> get exitCode => _pty.exitCode;
+
+  @override
   void write(Uint8List data) => _pty.write(data);
 
   @override
