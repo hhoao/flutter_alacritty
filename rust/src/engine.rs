@@ -2,9 +2,10 @@ use std::sync::{Arc, Mutex};
 
 use crate::event_proxy::{EngineEvent, EventProxy, EventQueue};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::index::{Column, Line, Point, Side};
+use alacritty_terminal::selection::{Selection, SelectionRange, SelectionType};
 use alacritty_terminal::term::cell::{Cell, Flags};
-use alacritty_terminal::term::{point_to_viewport, Config, Term, TermDamage, TermMode};
+use alacritty_terminal::term::{point_to_viewport, viewport_to_point, Config, Term, TermDamage, TermMode};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Processor, Rgb};
 
 /// Flat, FFI-friendly cell. fg/bg are packed 0x00RRGGBB.
@@ -51,6 +52,7 @@ pub const FLAG_WIDE: u16 = 1 << 4;
 pub const FLAG_WIDE_SPACER: u16 = 1 << 5;
 pub const FLAG_DIM: u16 = 1 << 6;
 pub const FLAG_STRIKEOUT: u16 = 1 << 7;
+pub const FLAG_SELECTED: u16 = 1 << 8;
 
 const DEFAULT_FG: u32 = 0x00D8_D8D8;
 const DEFAULT_BG: u32 = 0x0018_1818;
@@ -168,6 +170,22 @@ fn map_flags(f: Flags) -> u16 {
     out
 }
 
+fn point_in_range(p: Point, r: &SelectionRange) -> bool {
+    let after_start = p.line > r.start.line
+        || (p.line == r.start.line && p.column >= r.start.column);
+    let before_end = p.line < r.end.line
+        || (p.line == r.end.line && p.column <= r.end.column);
+    after_start && before_end
+}
+
+fn sel_type(kind: u8) -> SelectionType {
+    match kind {
+        1 => SelectionType::Semantic,
+        2 => SelectionType::Lines,
+        _ => SelectionType::Simple,
+    }
+}
+
 fn cell_data(cell: &Cell) -> CellData {
     CellData {
         codepoint: cell.c as u32,
@@ -224,6 +242,33 @@ impl TerminalEngine {
         self.term.scroll_display(Scroll::Bottom);
     }
 
+    fn viewport_point(&self, display_row: i32, col: u16) -> Point {
+        let d = self.term.grid().display_offset();
+        viewport_to_point(d, Point::new(display_row.max(0) as usize, Column(col as usize)))
+    }
+
+    pub fn selection_start(&mut self, display_row: i32, col: u16, right_half: bool, kind: u8) {
+        let p = self.viewport_point(display_row, col);
+        let side = if right_half { Side::Right } else { Side::Left };
+        self.term.selection = Some(Selection::new(sel_type(kind), p, side));
+    }
+
+    pub fn selection_update(&mut self, display_row: i32, col: u16, right_half: bool) {
+        let p = self.viewport_point(display_row, col);
+        let side = if right_half { Side::Right } else { Side::Left };
+        if let Some(sel) = self.term.selection.as_mut() {
+            sel.update(p, side);
+        }
+    }
+
+    pub fn selection_clear(&mut self) {
+        self.term.selection = None;
+    }
+
+    pub fn selection_text(&self) -> Option<String> {
+        self.term.selection_to_string()
+    }
+
     /// Cells of a single viewport row.
     fn line_cells(&self, row: usize) -> Vec<CellData> {
         let grid = self.term.grid();
@@ -267,10 +312,21 @@ impl TerminalEngine {
                 cells: vec![blank.clone(); cols],
             })
             .collect();
+        let sel = self
+            .term
+            .selection
+            .as_ref()
+            .and_then(|s| s.to_range(&self.term));
         for indexed in self.term.grid().display_iter() {
             if let Some(vp) = point_to_viewport(display_offset, indexed.point) {
                 if vp.line < rows && vp.column.0 < cols {
-                    lines[vp.line].cells[vp.column.0] = cell_data(indexed.cell);
+                    let mut cd = cell_data(indexed.cell);
+                    if let Some(r) = &sel {
+                        if point_in_range(indexed.point, r) {
+                            cd.flags |= FLAG_SELECTED;
+                        }
+                    }
+                    lines[vp.line].cells[vp.column.0] = cd;
                 }
             }
         }
@@ -511,6 +567,25 @@ mod tests {
 
         e.scroll_to_bottom();
         assert_eq!(e.full_snapshot().display_offset, 0);
+    }
+
+    #[test]
+    fn selection_text_and_selected_flag() {
+        let mut e = engine(20, 3);
+        e.advance(b"hello world".to_vec());
+        e.selection_start(0, 0, false, 0); // simple, row 0 col 0, left side
+        e.selection_update(0, 4, true); // through col 4, right side -> "hello"
+        let txt = e.selection_text().unwrap();
+        assert!(txt.starts_with("hello"), "got {:?}", txt);
+
+        let u = e.full_snapshot();
+        let row0 = u.lines.iter().find(|l| l.line == 0).unwrap();
+        assert_ne!(row0.cells[0].flags & FLAG_SELECTED, 0);
+        assert_ne!(row0.cells[4].flags & FLAG_SELECTED, 0);
+        assert_eq!(row0.cells[10].flags & FLAG_SELECTED, 0); // 'd' not selected
+
+        e.selection_clear();
+        assert!(e.selection_text().is_none());
     }
 
     #[test]
