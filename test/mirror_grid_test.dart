@@ -46,4 +46,47 @@ void main() {
     expect(g.flagsAt(0, 0) & kFlagWide, kFlagWide);
     expect(g.flagsAt(0, 1) & kFlagWideSpacer, kFlagWideSpacer);
   });
+
+  test('partial line wider than viewport clamps without throwing', () {
+    final g = MirrorGrid();
+    g.initializeEmpty(2, 10);
+    final wide = Int32List(15)..fillRange(0, 15, 65); // 'A' × 15
+    g.apply(GridUpdate(
+      full: false,
+      rows: 1,
+      columns: 15,
+      lines: [
+        LineCells(
+          line: 0,
+          codepoints: wide,
+          fg: Int32List(15),
+          bg: Int32List(15),
+          flags: Uint16List(15),
+        ),
+      ],
+      cursorRow: 0,
+      cursorCol: 0,
+      cursorVisible: true,
+    ));
+    expect(g.columns, 10);
+    expect(g.codepointAt(0, 0), 65);
+    expect(g.codepointAt(0, 9), 65);
+  });
+
+  test('partial update does not shrink viewport from inferred rows', () {
+    final g = MirrorGrid();
+    g.initializeEmpty(24, 80);
+    g.apply(GridUpdate(
+      full: false,
+      rows: 1, // wrong viewport hint from damage-only metadata
+      columns: 80,
+      lines: [row(0, 'x')],
+      cursorRow: 0,
+      cursorCol: 1,
+      cursorVisible: true,
+    ));
+    expect(g.rows, 24);
+    expect(g.columns, 80);
+    expect(g.codepointAt(0, 0), 'x'.codeUnitAt(0));
+  });
 }
