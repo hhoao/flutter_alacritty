@@ -45,6 +45,9 @@ class TerminalEngineClient {
     try {
       final update = await _binding.advanceAndTakeDamage(batch);
       _grid.apply(update);
+      // apply() notifies repaint: grid, but that can run after the current frame
+      // from an async FRB completion; ensure a frame is queued on idle UI.
+      SchedulerBinding.instance.scheduleFrame();
       _binding.pumpEvents(); // route PtyWrite/Title/Bell/Clipboard for this batch
     } finally {
       _advancing = false;

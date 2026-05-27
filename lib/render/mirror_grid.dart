@@ -38,6 +38,7 @@ class GridUpdate {
 /// Mutable terminal grid. Applies incremental line deltas in place and notifies
 /// the painter to repaint.
 class MirrorGrid extends ChangeNotifier {
+  int _generation = 0;
   int _rows = 0;
   int _columns = 0;
   List<Int32List> _codepoints = [];
@@ -46,6 +47,9 @@ class MirrorGrid extends ChangeNotifier {
   int _cursorRow = 0;
   int _cursorCol = 0;
   bool _cursorVisible = false;
+
+  /// Bumps on every [apply] / [initializeEmpty]; used by [TerminalPainter.shouldRepaint].
+  int get generation => _generation;
 
   int get rows => _rows;
   int get columns => _columns;
@@ -72,11 +76,14 @@ class MirrorGrid extends ChangeNotifier {
     _cursorRow = 0;
     _cursorCol = 0;
     _cursorVisible = true;
+    _generation++;
     notifyListeners();
   }
 
   void apply(GridUpdate u) {
-    if (u.full || u.rows != _rows || u.columns != _columns) {
+    // Partial damage only names changed lines; rows/columns on GridUpdate are not
+    // viewport size (see FrbEngineBinding._toGridUpdate). Resize on full only.
+    if (u.full) {
       _ensureSize(u.rows, u.columns);
     }
     for (final l in u.lines) {
@@ -88,6 +95,7 @@ class MirrorGrid extends ChangeNotifier {
     _cursorRow = u.cursorRow;
     _cursorCol = u.cursorCol;
     _cursorVisible = u.cursorVisible;
+    _generation++;
     notifyListeners();
   }
 }

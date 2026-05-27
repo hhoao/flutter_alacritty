@@ -35,4 +35,21 @@ void main() {
     expect(g.codepointAt(1, 0), 'Q'.codeUnitAt(0)); // mutated
     expect(g.cursorRow, 1);
   });
+
+  test('partial update does not shrink viewport from inferred rows', () {
+    final g = MirrorGrid();
+    g.initializeEmpty(24, 80);
+    g.apply(GridUpdate(
+      full: false,
+      rows: 1, // wrong viewport hint from damage-only metadata
+      columns: 80,
+      lines: [row(0, 'x')],
+      cursorRow: 0,
+      cursorCol: 1,
+      cursorVisible: true,
+    ));
+    expect(g.rows, 24);
+    expect(g.columns, 80);
+    expect(g.codepointAt(0, 0), 'x'.codeUnitAt(0));
+  });
 }

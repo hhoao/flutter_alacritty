@@ -96,6 +96,18 @@ flutter run -d linux
 | **Profiling** | Merge `advance`+`take_damage` FFI hop; optional per-advance byte cap |
 | **Integration** | Merge `feature/plan2a-core-data-path` → `main` after user manual gate; open PR for review |
 
+## Stale display fix (2026-05-27)
+
+**Symptom:** Terminal grid updated in memory but `CustomPaint` did not repaint until app hide/resume (lifecycle forced a frame).
+
+**Root causes:**
+
+1. **Missing frame after async apply** — `TerminalEngineClient._drain` completes `advanceAndTakeDamage` on a microtask after the post-frame callback. `MirrorGrid.notifyListeners()` marks the painter dirty, but on an idle UI no further frame was guaranteed without `SchedulerBinding.scheduleFrame()`.
+2. **Partial damage resized the grid** — `FrbEngineBinding._toGridUpdate` sets `rows` to `max(damaged line)+1`, not viewport height. `MirrorGrid.apply` treated any `rows` mismatch as a resize and could shrink the grid (e.g. one-line damage → 1-row mirror), breaking incremental updates after `initializeEmpty`.
+3. **`shouldRepaint` ignored content** — New `TerminalPainter` each build compared only `grid` identity; mutable cell data changes did not force repaint when the `repaint:` listenable path was insufficient.
+
+**Fix:** `scheduleFrame()` after `_grid.apply()`; `ListenableBuilder` on the paint subtree; `MirrorGrid.generation` in `shouldRepaint`; partial `apply` resizes only when `full: true`.
+
 ## Rendering / integration notes
 
 - **Font:** DejaVu Sans Mono + fallback (from Task 1 tracer fix), shared by metrics, glyph cache, and painter.

@@ -105,13 +105,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
             onKeyEvent: _onKey,
             child: GestureDetector(
               onTap: _focus.requestFocus,
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: TerminalPainter(
-                  grid: _grid,
-                  glyphs: _glyphs,
-                  cellWidth: _metrics.width,
-                  cellHeight: _metrics.height,
+              child: ListenableBuilder(
+                listenable: _grid,
+                builder: (context, _) => CustomPaint(
+                  size: Size.infinite,
+                  painter: TerminalPainter(
+                    grid: _grid,
+                    glyphs: _glyphs,
+                    cellWidth: _metrics.width,
+                    cellHeight: _metrics.height,
+                  ),
                 ),
               ),
             ),

@@ -64,5 +64,8 @@ class TerminalPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant TerminalPainter old) =>
-      old.grid != grid || old.cellWidth != cellWidth || old.cellHeight != cellHeight;
+      old.grid != grid ||
+      old.grid.generation != grid.generation ||
+      old.cellWidth != cellWidth ||
+      old.cellHeight != cellHeight;
 }

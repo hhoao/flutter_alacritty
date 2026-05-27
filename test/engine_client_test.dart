@@ -30,6 +30,8 @@ class _FakeBinding implements EngineBinding {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('bursts within one frame coalesce into a single advance', () async {
     final binding = _FakeBinding();
     final grid = MirrorGrid();
