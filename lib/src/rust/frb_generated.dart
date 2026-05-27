@@ -560,14 +560,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RenderUpdate dco_decode_render_update(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return RenderUpdate(
       lines: dco_decode_list_line_update(arr[0]),
       full: dco_decode_bool(arr[1]),
       cursorLine: dco_decode_u_32(arr[2]),
       cursorCol: dco_decode_u_32(arr[3]),
       cursorVisible: dco_decode_bool(arr[4]),
+      cursorShape: dco_decode_u_8(arr[5]),
+      cursorBlinking: dco_decode_bool(arr[6]),
     );
   }
 
@@ -767,12 +769,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_cursorLine = sse_decode_u_32(deserializer);
     var var_cursorCol = sse_decode_u_32(deserializer);
     var var_cursorVisible = sse_decode_bool(deserializer);
+    var var_cursorShape = sse_decode_u_8(deserializer);
+    var var_cursorBlinking = sse_decode_bool(deserializer);
     return RenderUpdate(
       lines: var_lines,
       full: var_full,
       cursorLine: var_cursorLine,
       cursorCol: var_cursorCol,
       cursorVisible: var_cursorVisible,
+      cursorShape: var_cursorShape,
+      cursorBlinking: var_cursorBlinking,
     );
   }
 
@@ -977,6 +983,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.cursorLine, serializer);
     sse_encode_u_32(self.cursorCol, serializer);
     sse_encode_bool(self.cursorVisible, serializer);
+    sse_encode_u_8(self.cursorShape, serializer);
+    sse_encode_bool(self.cursorBlinking, serializer);
   }
 
   @protected

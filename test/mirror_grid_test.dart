@@ -36,6 +36,23 @@ void main() {
     expect(g.cursorRow, 1);
   });
 
+  test('carries cursor shape and blinking', () {
+    final g = MirrorGrid();
+    g.apply(GridUpdate(
+      full: true,
+      rows: 1,
+      columns: 1,
+      lines: [row(0, ' ')],
+      cursorRow: 0,
+      cursorCol: 0,
+      cursorVisible: true,
+      cursorShape: 2,
+      cursorBlinking: true,
+    ));
+    expect(g.cursorShape, 2);
+    expect(g.cursorBlinking, true);
+  });
+
   test('stores per-cell flags', () {
     final g = MirrorGrid();
     g.apply(GridUpdate(
