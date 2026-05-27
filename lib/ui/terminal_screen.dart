@@ -92,8 +92,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final ctrl = HardwareKeyboard.instance.isControlPressed;
-    final bytes = encodeKey(event.logicalKey, event.character, ctrl: ctrl);
+    final hw = HardwareKeyboard.instance;
+    final bytes = encodeKey(
+      event.logicalKey,
+      event.character,
+      shift: hw.isShiftPressed,
+      alt: hw.isAltPressed,
+      ctrl: hw.isControlPressed,
+      meta: hw.isMetaPressed,
+      modeFlags: _grid.modeFlags,
+    );
     if (bytes == null) return KeyEventResult.ignored;
     _pty?.write(bytes);
     return KeyEventResult.handled;
