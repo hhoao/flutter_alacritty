@@ -2,7 +2,7 @@ name: flutter_alacritty
 description: >-
   Flutter terminal widget powered by an Alacritty-based Rust engine
   (flutter_rust_bridge + flutter_pty).
-version: 1.0.0
+version: 1.0.1
 repository: https://github.com/hhoao/flutter_alacritty
 issue_tracker: https://github.com/hhoao/flutter_alacritty/issues
 homepage: https://github.com/hhoao/flutter_alacritty
