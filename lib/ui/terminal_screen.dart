@@ -548,12 +548,18 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         ),
                       ),
                     ),
-                  if (_searchOpen)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
+                  // Always mounted under Offstage so first-time costs (IME
+                  // attach on Linux, Material icon/font load) are paid at app
+                  // startup — opening search just toggles visibility, no
+                  // widget construction.
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Offstage(
+                      offstage: !_searchOpen,
                       child: TerminalSearchBar(
+                        visible: _searchOpen,
                         invalidPattern: _searchInvalid,
                         onChanged: _searchChanged,
                         onNext: () => _client?.searchNext(),
@@ -561,6 +567,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         onClose: _closeSearch,
                       ),
                     ),
+                  ),
                 ],
               ),
               ),

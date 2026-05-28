@@ -206,8 +206,12 @@ void main() {
         }) => _FakeBinding(),
       ),
     ));
-    await tester.pump();
-    expect(find.byType(TerminalSearchBar), findsNothing);
+    await tester.pumpAndSettle();
+    // Bar is always mounted (Offstage prewarm); visibility tracked via its
+    // own `visible` prop instead of widget presence.
+    TerminalSearchBar bar() => tester.widget<TerminalSearchBar>(
+        find.byType(TerminalSearchBar, skipOffstage: false));
+    expect(bar().visible, isFalse);
     // Open with Ctrl+Shift+F.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
@@ -215,7 +219,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
-    expect(find.byType(TerminalSearchBar), findsOneWidget);
+    expect(bar().visible, isTrue);
     // And the SAME hotkey closes it again (regression: the _searchOpen guard
     // used to swallow Ctrl+Shift+F before the toggle branch could fire).
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -224,7 +228,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
-    expect(find.byType(TerminalSearchBar), findsNothing);
+    expect(bar().visible, isFalse);
     title.dispose();
   });
 

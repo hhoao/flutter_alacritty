@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 /// logic stays in TerminalScreen via the callbacks.
 class TerminalSearchBar extends StatefulWidget {
   const TerminalSearchBar({
+    required this.visible,
     required this.onChanged,
     required this.onNext,
     required this.onPrev,
@@ -13,6 +14,10 @@ class TerminalSearchBar extends StatefulWidget {
     super.key,
   });
 
+  /// Controls focus + text clearing on open/close. The widget is meant to be
+  /// kept mounted (under Offstage) so first-time costs (IME attach, Material
+  /// icon font load) are paid at app startup, not on first search open.
+  final bool visible;
   final bool invalidPattern;
   final ValueChanged<String> onChanged;
   final VoidCallback onNext;
@@ -30,7 +35,19 @@ class _TerminalSearchBarState extends State<TerminalSearchBar> {
   @override
   void initState() {
     super.initState();
-    _node.requestFocus();
+    if (widget.visible) _node.requestFocus();
+  }
+
+  @override
+  void didUpdateWidget(TerminalSearchBar old) {
+    super.didUpdateWidget(old);
+    if (widget.visible == old.visible) return;
+    if (widget.visible) {
+      _node.requestFocus();
+    } else {
+      _node.unfocus();
+      _ctrl.clear(); // reset pattern so reopening doesn't re-arm a stale search
+    }
   }
 
   @override
@@ -78,7 +95,6 @@ class _TerminalSearchBarState extends State<TerminalSearchBar> {
             child: TextField(
               controller: _ctrl,
               focusNode: _node,
-              autofocus: true,
               style: const TextStyle(color: Color(0xFFEDEDED), fontSize: 14),
               cursorColor: const Color(0xFFEDEDED),
               decoration: InputDecoration(
