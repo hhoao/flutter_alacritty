@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import '../config/terminal_config.dart';
 import '../engine/engine_binding.dart';
@@ -14,6 +15,7 @@ import '../input/paste.dart';
 import '../input/term_mode.dart';
 import '../pty/flutter_pty_backend.dart';
 import '../pty/pty_backend.dart';
+import '../render/cell_flags.dart';
 import '../render/cell_metrics.dart';
 import '../render/glyph_cache.dart';
 import '../render/mirror_grid.dart';
@@ -35,6 +37,8 @@ typedef EngineFactory = EngineBinding Function({
   required EngineConfig engineConfig,
 });
 
+typedef UrlLauncher = Future<bool> Function(String url);
+
 enum TermStatus { running, exited, error }
 
 class TerminalScreen extends StatefulWidget {
@@ -43,6 +47,7 @@ class TerminalScreen extends StatefulWidget {
     this.ptyFactory,
     this.engineFactory,
     this.config,
+    this.launchUrl,
     super.key,
   });
 
@@ -50,12 +55,15 @@ class TerminalScreen extends StatefulWidget {
   final PtyFactory? ptyFactory;
   final EngineFactory? engineFactory;
   final TerminalConfig? config;
+  final UrlLauncher? launchUrl;
 
   @override
   State<TerminalScreen> createState() => _TerminalScreenState();
 }
 
 class _TerminalScreenState extends State<TerminalScreen> {
+  late final UrlLauncher _launch = widget.launchUrl ??
+      (u) async => launcher.launchUrl(Uri.parse(u));
   late final TerminalConfig _config = widget.config ?? TerminalConfig.defaults();
   late final TextStyle _style = _config.textStyle;
   late final CellMetrics _metrics = CellMetrics.measure(_style);
@@ -101,6 +109,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   bool _searchInvalid = false;
   double _touchScrollAccum = 0;
   Timer? _flingTimer;
+  MouseCursor _hoverCursor = MouseCursor.defer;
 
   // Repaint is driven by CustomPaint(repaint: _grid): MirrorGrid.apply() notifies,
   // RenderCustomPaint marks needs-paint, and the client requests a frame when it
@@ -288,6 +297,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
     return (row, col, rightHalf);
   }
 
+  void _updateHoverCursor(Offset local) {
+    final (r, c, _) = _cellAt(local);
+    final hyper = _grid.rows > r &&
+        _grid.columns > c &&
+        isHyperlink(_grid.flagsAt(r, c));
+    final next = hyper ? SystemMouseCursors.click : MouseCursor.defer;
+    if (next != _hoverCursor) setState(() => _hoverCursor = next);
+  }
+
   void _refreshSelection() {
     if (_client == null) return;
     // Selection changes FLAG_SELECTED on cells whose content didn't change, so
@@ -377,6 +395,19 @@ class _TerminalScreenState extends State<TerminalScreen> {
                   return;
                 }
                 _focus.requestFocus();
+                final hw = HardwareKeyboard.instance;
+                // Ctrl + left-click on a hyperlink cell → launch URI.
+                if (hw.isControlPressed && e.buttons & kPrimaryButton != 0) {
+                  final (r, c, _) = _cellAt(e.localPosition);
+                  if (_client != null && isHyperlink(_grid.flagsAt(r, c))) {
+                    final id = _grid.hyperlinkIdAt(r, c);
+                    final uri = _client!.resolveHyperlink(id);
+                    if (uri != null) {
+                      _launch(uri);
+                      return;
+                    }
+                  }
+                }
                 final localSelect =
                     !anyMouse(_grid.modeFlags) || HardwareKeyboard.instance.isShiftPressed;
                 if (localSelect &&
@@ -510,7 +541,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 },
                 child: Stack(
                 children: [
-                  CustomPaint(
+                  MouseRegion(
+                    cursor: _hoverCursor,
+                    onHover: (e) => _updateHoverCursor(e.localPosition),
+                    child: CustomPaint(
                     size: Size.infinite,
                     painter: TerminalPainter(
                       grid: _grid,
@@ -530,6 +564,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         fg: _config.colors.hintStartFg,
                       ),
                     ),
+                  ),
                   ),
                   if (_status != TermStatus.running)
                     IgnorePointer(

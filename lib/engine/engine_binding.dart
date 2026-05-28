@@ -31,6 +31,7 @@ abstract class EngineBinding {
   bool searchNext();
   bool searchPrev();
   void searchClear();
+  String? resolveHyperlink(int id);
   void dispose();
 }
 
@@ -136,6 +137,10 @@ class FrbEngineBinding implements EngineBinding {
 
   @override
   void searchClear() => engineSearchClear(engine: _engine);
+
+  @override
+  String? resolveHyperlink(int id) =>
+      engineResolveHyperlink(engine: _engine, id: id);
 
   @override
   void dispose() {}

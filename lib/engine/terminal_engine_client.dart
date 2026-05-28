@@ -68,6 +68,8 @@ class TerminalEngineClient {
     refreshView();
   }
 
+  String? resolveHyperlink(int id) => _binding.resolveHyperlink(id);
+
   void feed(Uint8List bytes) {
     _buf.add(bytes);
     _scheduleDrain();

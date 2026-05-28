@@ -63,6 +63,8 @@ class _SearchFake implements EngineBinding {
   @override
   String? selectionText() => null;
   @override
+  String? resolveHyperlink(int id) => null;
+  @override
   void dispose() {}
 }
 
@@ -126,6 +128,8 @@ class _FakeBinding implements EngineBinding {
   void searchClear() {}
   @override
   GridUpdate fullSnapshotSearched() => fullSnapshot();
+  @override
+  String? resolveHyperlink(int id) => null;
   @override
   void dispose() {}
 }

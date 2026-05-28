@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_alacritty/config/terminal_config.dart';
 import 'package:flutter_alacritty/engine/engine_binding.dart';
 import 'package:flutter_alacritty/pty/pty_backend.dart';
+import 'package:flutter_alacritty/render/cell_flags.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
 import 'package:flutter_alacritty/ui/search_bar.dart';
 import 'package:flutter_alacritty/ui/terminal_screen.dart';
@@ -37,6 +38,8 @@ class _ClearOnTapBinding extends _FakeBinding {
 class _FakeBinding implements EngineBinding {
   int scrollCalls = 0;
   int selStartCalls = 0;
+  final Map<(int, int), int> hyperlinkAt = {};
+  final Map<int, String> hyperlinkUris = {};
 
   GridUpdate _blank() => GridUpdate(
         full: true, rows: 1, columns: 1,
@@ -49,6 +52,44 @@ class _FakeBinding implements EngineBinding {
         )],
         cursorRow: 0, cursorCol: 0, cursorVisible: true,
       );
+
+  GridUpdate _hyperlinkSnapshot() {
+    const cols = 80, rows = 24;
+    final hyperlinks = Int32List(cols);
+    final flags = Uint16List(cols);
+    hyperlinkAt.forEach((rc, id) {
+      if (rc.$1 == 0 && rc.$2 < cols) {
+        hyperlinks[rc.$2] = id;
+        flags[rc.$2] = kFlagHyperlink;
+      }
+    });
+    final line0 = LineCells(
+      line: 0,
+      codepoints: Int32List(cols)..fillRange(0, cols, 32),
+      fg: Int32List(cols)..fillRange(0, cols, 0xD8D8D8),
+      bg: Int32List(cols)..fillRange(0, cols, 0x181818),
+      flags: flags,
+      hyperlinkId: hyperlinks,
+    );
+    LineCells blank(int i) => LineCells(
+          line: i,
+          codepoints: Int32List(cols)..fillRange(0, cols, 32),
+          fg: Int32List(cols)..fillRange(0, cols, 0xD8D8D8),
+          bg: Int32List(cols)..fillRange(0, cols, 0x181818),
+          flags: Uint16List(cols),
+          hyperlinkId: Int32List(cols),
+        );
+    return GridUpdate(
+      full: true,
+      rows: rows,
+      columns: cols,
+      lines: [line0, for (var i = 1; i < rows; i++) blank(i)],
+      cursorRow: 0,
+      cursorCol: 0,
+      cursorVisible: false,
+    );
+  }
+
   @override
   Future<void> advance(Uint8List bytes) async {}
   @override
@@ -86,7 +127,9 @@ class _FakeBinding implements EngineBinding {
   @override
   void searchClear() {}
   @override
-  GridUpdate fullSnapshotSearched() => _blank();
+  GridUpdate fullSnapshotSearched() => _hyperlinkSnapshot();
+  @override
+  String? resolveHyperlink(int id) => hyperlinkUris[id];
   @override
   void dispose() {}
 }
@@ -312,6 +355,46 @@ void main() {
     await tester.longPressAt(center);
     await tester.pump();
     expect(binding.selStartCalls, greaterThan(0));
+    title.dispose();
+  });
+
+  testWidgets('Ctrl+left-click on a hyperlink cell launches the URI', (tester) async {
+    final title = ValueNotifier<String>('t');
+    final binding = _FakeBinding()
+      ..hyperlinkAt[(0, 0)] = 5
+      ..hyperlinkUris[5] = 'https://example.com';
+    String? launched;
+    await tester.pumpWidget(MaterialApp(
+      home: TerminalScreen(
+        title: title,
+        ptyFactory: ({required rows, required columns}) => _FakePty(),
+        engineFactory: ({
+          required columns,
+          required rows,
+          required onPtyWrite,
+          required onTitle,
+          required onBell,
+          required onClipboard,
+          required engineConfig,
+        }) => binding,
+        launchUrl: (u) async {
+          launched = u;
+          return true;
+        },
+      ),
+    ));
+    await tester.pump();
+    final pos = tester.getTopLeft(find.byType(CustomPaint).first) + const Offset(2, 2);
+    // Prime the grid from the binding's searched snapshot (via selection refresh).
+    final prime = await tester.startGesture(pos, kind: PointerDeviceKind.mouse);
+    await prime.up();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    final click = await tester.startGesture(pos, kind: PointerDeviceKind.mouse);
+    await click.up();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(launched, 'https://example.com');
     title.dispose();
   });
 }
