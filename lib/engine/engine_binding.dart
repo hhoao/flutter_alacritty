@@ -35,6 +35,17 @@ abstract class EngineBinding {
   void dispose();
 }
 
+/// Implemented by bindings (typically test fakes) that allow rewiring their
+/// callbacks after construction. Production bindings like [FrbEngineBinding]
+/// take callbacks in their constructor and do NOT mix this in — they're wired
+/// once by `EngineFactory` and never rebound.
+abstract class RewireableEngineBinding implements EngineBinding {
+  set onPtyWrite(void Function(Uint8List)? cb);
+  set onTitle(void Function(String)? cb);
+  set onBell(void Function()? cb);
+  set onClipboard(void Function(String)? cb);
+}
+
 /// FRB-backed binding. Owns the engine handle, translates FRB [RenderUpdate]
 /// into native [GridUpdate], and dispatches polled terminal→host events.
 class FrbEngineBinding implements EngineBinding {

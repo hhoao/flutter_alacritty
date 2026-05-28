@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert' show utf8;
-import 'dart:typed_data';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -10,12 +9,12 @@ import 'package:flutter_alacritty/config/terminal_config.dart';
 import 'package:flutter_alacritty/engine/engine_binding.dart';
 import 'package:flutter_alacritty/input/ime_session.dart';
 import 'package:flutter_alacritty/pty/pty_backend.dart';
-import 'package:flutter_alacritty/render/cell_flags.dart';
-import 'package:flutter_alacritty/render/mirror_grid.dart';
 import 'package:flutter_alacritty/render/terminal_painter.dart';
 import 'package:flutter_alacritty/ui/preedit_overlay.dart';
 import 'package:flutter_alacritty/ui/search_bar.dart';
 import 'package:flutter_alacritty/ui/terminal_screen.dart';
+
+import 'fake_binding.dart';
 
 class _FakePty implements PtyBackend {
   final _out = StreamController<Uint8List>.broadcast();
@@ -34,127 +33,6 @@ class _FakePty implements PtyBackend {
   void kill() => killed = true;
 }
 
-class _ClearOnTapBinding extends _FakeBinding {
-  _ClearOnTapBinding(this.onClear);
-  final void Function() onClear;
-  @override
-  void selectionClear() => onClear();
-}
-
-class _FakeBinding implements EngineBinding {
-  int scrollCalls = 0;
-  int selStartCalls = 0;
-  int selClearCalls = 0;
-  int scrollToBottomCalls = 0;
-  int fullSnapshotCalls = 0;
-  /// Forwarded into emitted GridUpdates so tests can flip kModeBracketedPaste
-  /// etc. on the mirror grid via the existing refresh path.
-  int modeFlags = 0;
-  final Map<(int, int), int> hyperlinkAt = {};
-  final Map<int, String> hyperlinkUris = {};
-
-  GridUpdate _blank() => GridUpdate(
-        full: true, rows: 1, columns: 1,
-        lines: [LineCells(
-          line: 0,
-          codepoints: Int32List(1),
-          fg: Int32List(1),
-          bg: Int32List(1),
-          flags: Uint16List(1),
-        )],
-        cursorRow: 0, cursorCol: 0, cursorVisible: true,
-        modeFlags: modeFlags,
-      );
-
-  GridUpdate _hyperlinkSnapshot() {
-    const cols = 80, rows = 24;
-    final hyperlinks = Int32List(cols);
-    final flags = Uint16List(cols);
-    hyperlinkAt.forEach((rc, id) {
-      if (rc.$1 == 0 && rc.$2 < cols) {
-        hyperlinks[rc.$2] = id;
-        flags[rc.$2] = kFlagHyperlink;
-      }
-    });
-    final line0 = LineCells(
-      line: 0,
-      codepoints: Int32List(cols)..fillRange(0, cols, 32),
-      fg: Int32List(cols)..fillRange(0, cols, 0xD8D8D8),
-      bg: Int32List(cols)..fillRange(0, cols, 0x181818),
-      flags: flags,
-      hyperlinkId: hyperlinks,
-    );
-    LineCells blank(int i) => LineCells(
-          line: i,
-          codepoints: Int32List(cols)..fillRange(0, cols, 32),
-          fg: Int32List(cols)..fillRange(0, cols, 0xD8D8D8),
-          bg: Int32List(cols)..fillRange(0, cols, 0x181818),
-          flags: Uint16List(cols),
-          hyperlinkId: Int32List(cols),
-        );
-    return GridUpdate(
-      full: true,
-      rows: rows,
-      columns: cols,
-      lines: [line0, for (var i = 1; i < rows; i++) blank(i)],
-      cursorRow: 0,
-      cursorCol: 0,
-      cursorVisible: false,
-      modeFlags: modeFlags,
-    );
-  }
-
-  @override
-  Future<void> advance(Uint8List bytes) async {}
-  @override
-  Future<GridUpdate> advanceAndTakeDamage(Uint8List bytes) async => _blank();
-  @override
-  Future<GridUpdate> takeDamage() async => _blank();
-  @override
-  GridUpdate fullSnapshot() => _blank();
-  @override
-  void pumpEvents() {}
-  @override
-  void resize(int columns, int rows) {}
-  @override
-  Future<void> scrollLines(int delta) async {
-    scrollCalls++;
-  }
-  @override
-  Future<void> scrollToBottom() async {
-    scrollToBottomCalls++;
-  }
-  @override
-  void selectionStart(int displayRow, int col, bool rightHalf, int kind) {
-    selStartCalls++;
-  }
-  @override
-  void selectionUpdate(int displayRow, int col, bool rightHalf) {}
-  @override
-  void selectionClear() {
-    selClearCalls++;
-  }
-  @override
-  String? selectionText() => null;
-  @override
-  bool searchSet(String pattern) => pattern != '(';
-  @override
-  bool searchNext() => false;
-  @override
-  bool searchPrev() => false;
-  @override
-  void searchClear() {}
-  @override
-  GridUpdate fullSnapshotSearched() {
-    fullSnapshotCalls++;
-    return _hyperlinkSnapshot();
-  }
-  @override
-  String? resolveHyperlink(int id) => hyperlinkUris[id];
-  @override
-  void dispose() {}
-}
-
 void main() {
   testWidgets('shell exit shows overlay; input restarts', (tester) async {
     final ptys = <_FakePty>[];
@@ -170,7 +48,7 @@ void main() {
       required void Function() onBell,
       required void Function(String) onClipboard,
       required engineConfig,
-    }) => _FakeBinding();
+    }) => FakeBinding();
 
     await tester.pumpWidget(MaterialApp(
       home: TerminalScreen(
@@ -199,7 +77,7 @@ void main() {
       home: TerminalScreen(
         title: ValueNotifier('t'),
         ptyFactory: boom,
-        engineFactory: ({required columns, required rows, required onPtyWrite, required onTitle, required onBell, required onClipboard, required engineConfig}) => _FakeBinding(),
+        engineFactory: ({required columns, required rows, required onPtyWrite, required onTitle, required onBell, required onClipboard, required engineConfig}) => FakeBinding(),
       ),
     ));
     await tester.pumpAndSettle();
@@ -222,7 +100,7 @@ void main() {
           required onBell,
           required onClipboard,
           required engineConfig,
-        }) => _FakeBinding(),
+        }) => FakeBinding(),
       ),
     ));
     await tester.pump();
@@ -241,7 +119,7 @@ void main() {
           required columns, required rows,
           required onPtyWrite, required onTitle,
           required onBell, required onClipboard, required engineConfig,
-        }) => _FakeBinding(),
+        }) => FakeBinding(),
       ),
     ));
     await tester.pump();
@@ -267,7 +145,7 @@ void main() {
           required columns, required rows,
           required onPtyWrite, required onTitle,
           required onBell, required onClipboard, required engineConfig,
-        }) => _FakeBinding(),
+        }) => FakeBinding(),
       ),
     ));
     await tester.pumpAndSettle();
@@ -298,7 +176,7 @@ void main() {
 
   testWidgets('one-finger drag scrolls', (tester) async {
     final title = ValueNotifier<String>('t');
-    final binding = _FakeBinding();
+    final binding = FakeBinding();
     await tester.pumpWidget(MaterialApp(
       home: TerminalScreen(
         title: title,
@@ -340,7 +218,7 @@ void main() {
           required onBell,
           required onClipboard,
           required engineConfig,
-        }) => _ClearOnTapBinding(() => clears++),
+        }) => ClearOnTapBinding(() => clears++),
       ),
     ));
     await tester.pump();
@@ -362,7 +240,7 @@ void main() {
 
   testWidgets('long-press selects', (tester) async {
     final title = ValueNotifier<String>('t');
-    final binding = _FakeBinding();
+    final binding = FakeBinding();
     await tester.pumpWidget(MaterialApp(
       home: TerminalScreen(
         title: title,
@@ -388,7 +266,7 @@ void main() {
 
   testWidgets('Ctrl+left-click on a hyperlink cell launches the URI', (tester) async {
     final title = ValueNotifier<String>('t');
-    final binding = _FakeBinding()
+    final binding = FakeBinding()
       ..hyperlinkAt[(0, 0)] = 5
       ..hyperlinkUris[5] = 'https://example.com';
     String? launched;
@@ -435,7 +313,7 @@ void main() {
         required columns, required rows,
         required onPtyWrite, required onTitle,
         required onBell, required onClipboard, required engineConfig,
-      }) => _FakeBinding(),
+      }) => FakeBinding(),
     )));
     await tester.pump();
     double cellH() {
@@ -478,7 +356,7 @@ void main() {
           required onBell,
           required onClipboard,
           required engineConfig,
-        }) => _FakeBinding(),
+        }) => FakeBinding(),
       ),
     ));
     await tester.pump();
@@ -518,7 +396,7 @@ void main() {
           required onBell,
           required onClipboard,
           required engineConfig,
-        }) => _FakeBinding(),
+        }) => FakeBinding(),
       ),
     ));
     await tester.pump();
@@ -535,7 +413,7 @@ void main() {
   testWidgets('Shift+right-click bypasses the menu (forwards to program)',
       (tester) async {
     final title = ValueNotifier<String>('t');
-    final binding = _FakeBinding();
+    final binding = FakeBinding();
     await tester.pumpWidget(MaterialApp(
       home: TerminalScreen(
         title: title,
@@ -579,7 +457,7 @@ void main() {
         required columns, required rows,
         required onPtyWrite, required onTitle,
         required onBell, required onClipboard, required engineConfig,
-      }) => _FakeBinding(),
+      }) => FakeBinding(),
     )));
     await tester.pump();
     expect(find.byType(DropTarget), findsOneWidget);
@@ -589,7 +467,7 @@ void main() {
   testWidgets('drop writes shell-quoted, bracketed-paste-encoded paths', (tester) async {
     final title = ValueNotifier<String>('t');
     final pty = _FakePty();
-    final binding = _FakeBinding()..modeFlags = (1 << 4); // kModeBracketedPaste
+    final binding = FakeBinding()..modeFlags = (1 << 4); // kModeBracketedPaste
     await tester.pumpWidget(MaterialApp(home: TerminalScreen(
       title: title,
       ptyFactory: ({required rows, required columns}) => pty,
@@ -634,7 +512,7 @@ void main() {
         required columns, required rows,
         required onPtyWrite, required onTitle,
         required onBell, required onClipboard, required engineConfig,
-      }) => _FakeBinding(),
+      }) => FakeBinding(),
     )));
     await tester.pump();
     final state = tester.state<State<TerminalScreen>>(find.byType(TerminalScreen));
@@ -660,7 +538,7 @@ void main() {
         required columns, required rows,
         required onPtyWrite, required onTitle,
         required onBell, required onClipboard, required engineConfig,
-      }) => _FakeBinding(),
+      }) => FakeBinding(),
     )));
     await tester.pump();
     final state = tester.state<State<TerminalScreen>>(find.byType(TerminalScreen));
@@ -686,7 +564,7 @@ void main() {
         required columns, required rows,
         required onPtyWrite, required onTitle,
         required onBell, required onClipboard, required engineConfig,
-      }) => _FakeBinding(),
+      }) => FakeBinding(),
     )));
     await tester.pump();
     await tester.tap(find.byType(CustomPaint).first);
@@ -709,7 +587,7 @@ void main() {
     // a scrollback offset to scroll past — we mirror that here.
     final title = ValueNotifier<String>('t');
     final pty = _FakePty();
-    final binding = _FakeBinding();
+    final binding = FakeBinding();
     await tester.pumpWidget(MaterialApp(home: TerminalScreen(
       title: title,
       ptyFactory: ({required rows, required columns}) => pty,
@@ -743,7 +621,7 @@ void main() {
               ' Ctrl+Shift+C still copies through encodeKey path', (tester) async {
     final title = ValueNotifier<String>('t');
     final pty = _FakePty();
-    final binding = _FakeBinding();
+    final binding = FakeBinding();
     await tester.pumpWidget(MaterialApp(home: TerminalScreen(
       title: title,
       ptyFactory: ({required rows, required columns}) => pty,

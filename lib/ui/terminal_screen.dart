@@ -8,9 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import '../config/terminal_config.dart';
-import '../engine/engine_binding.dart';
-import '../src/rust/engine.dart' show EngineConfig;
-import '../engine/terminal_engine_client.dart';
+import '../engine/terminal_engine.dart';
 import '../input/ime_session.dart';
 import '../input/key_input.dart';
 import '../input/mouse_input.dart';
@@ -25,6 +23,9 @@ import '../render/mirror_grid.dart';
 import '../render/terminal_painter.dart';
 import 'preedit_overlay.dart';
 import 'search_bar.dart';
+
+// Re-exported so consumers keep importing the typedef from this file.
+export '../engine/terminal_engine.dart' show EngineFactory;
 
 String _shellQuote(String s) {
   const needs = [
@@ -55,16 +56,6 @@ String _shellQuote(String s) {
 typedef PtyFactory = PtyBackend Function({
   required int rows,
   required int columns,
-});
-
-typedef EngineFactory = EngineBinding Function({
-  required int columns,
-  required int rows,
-  required void Function(Uint8List) onPtyWrite,
-  required void Function(String) onTitle,
-  required void Function() onBell,
-  required void Function(String) onClipboard,
-  required EngineConfig engineConfig,
 });
 
 typedef UrlLauncher = Future<bool> Function(String url);
@@ -112,10 +103,19 @@ class _TerminalScreenState extends State<TerminalScreen>
     lineHeight: _config.font.lineHeight,
   );
 
-  late final MirrorGrid _grid = MirrorGrid(
+  // Lazy-built so a spawn failure can reach `_status == error` without
+  // having already paid binding-construction cost. Recreated on restart.
+  TerminalEngine? _engine;
+  // Empty placeholder so the painter has something to bind before the engine
+  // exists (and during error overlay). Owned by State so it's disposed once.
+  late final MirrorGrid _placeholderGrid = MirrorGrid(
     defaultFg: _config.colors.foreground,
     defaultBg: _config.colors.background,
   );
+  // The painter and UI helpers read the grid directly; while the engine is
+  // alive it owns the grid (single source of truth). Pre-spawn / post-error
+  // we expose the placeholder so `build()` still has a real grid to render.
+  MirrorGrid get _grid => _engine?.gridForView ?? _placeholderGrid;
   final ValueNotifier<bool> _blinkOn = ValueNotifier(true);
   Timer? _blinkTimer;
   final FocusNode _focus = FocusNode();
@@ -143,9 +143,17 @@ class _TerminalScreenState extends State<TerminalScreen>
     _focus.addListener(_handleImeFocusChange);
   }
 
-  TerminalEngineClient? _client;
+  /// Mirror engine.title → widget.title (consumer-facing notifier).
+  void _syncTitle() {
+    final e = _engine;
+    if (e != null) widget.title.value = e.title.value;
+  }
+
   PtyBackend? _pty;
   StreamSubscription<Uint8List>? _outputSub;
+  StreamSubscription<Uint8List>? _engineOutputSub;
+  StreamSubscription<void>? _bellSub;
+  StreamSubscription<String>? _clipSub;
   int _cols = 0, _rows = 0;
   bool _lastFocused = false;
   int _pressedButton = 0; // last button pressed, for SGR release reporting
@@ -173,19 +181,19 @@ class _TerminalScreenState extends State<TerminalScreen>
   // schedules a drain — so no per-frame setState rebuild is needed.
 
   void _ensureStarted(int cols, int rows) {
-    if (_client != null) {
+    if (_engine != null) {
       if ((cols != _cols || rows != _rows) && _status == TermStatus.running) {
         _cols = cols;
         _rows = rows;
-        _client!.resize(cols, rows);
+        _engine!.resize(columns: cols, rows: rows);
         _pty!.resize(rows, cols);
-        _client!.scrollToBottom();
+        _engine!.scrollToBottom();
       }
       return;
     }
     _cols = cols;
     _rows = rows;
-    // Avoid re-entering _start each frame while `_client == null` and
+    // Avoid re-entering _start each frame while `_engine == null` and
     // `_status == error` (spawn failure); user retry goes through `_restart`.
     if (_status != TermStatus.error) {
       _start(cols, rows);
@@ -200,20 +208,26 @@ class _TerminalScreenState extends State<TerminalScreen>
         rows: rows,
         columns: cols,
       );
-      final binding = (widget.engineFactory ?? FrbEngineBinding.new)(
-        columns: cols,
-        rows: rows,
-        onPtyWrite: pty.write,
-        onTitle: (t) => widget.title.value = t,
-        onBell: _flashBell,
-        onClipboard: (t) => Clipboard.setData(ClipboardData(text: t)),
-        engineConfig: _config.engineConfig,
-      );
       _pty = pty;
-      _client = TerminalEngineClient(binding: binding, grid: _grid);
-      _grid.initializeEmpty(rows, cols);
+      // Engine seam: PTY ↔ engine plumbing is `pty.output → engine.feed` and
+      // `engine.output → pty.write`. The four `on*` callbacks the
+      // FrbEngineBinding used to take are wired internally to streams + the
+      // title ValueListenable; we subscribe to them here so the host responds
+      // to title changes, bells, and OSC 52 SET.
+      final engine = TerminalEngine(
+        config: _config,
+        engineFactory: widget.engineFactory,
+      );
+      _engine = engine;
+      engine.title.addListener(_syncTitle);
+      _bellSub = engine.bell.listen((_) => _flashBell());
+      _clipSub = engine.clipboardStore
+          .listen((t) => Clipboard.setData(ClipboardData(text: t)));
+      _engineOutputSub = engine.output.listen(pty.write);
+      engine.resize(columns: cols, rows: rows);
+      engine.initializeEmpty(rows, cols);
       _outputSub = pty.output.listen(
-        _client!.feed,
+        engine.feed,
         onDone: () => _exitIfCurrent(pty, null),
       );
       pty.exitCode.then((code) => _exitIfCurrent(pty, code));
@@ -238,12 +252,19 @@ class _TerminalScreenState extends State<TerminalScreen>
 
   void _restart() {
     _outputSub?.cancel();
+    _engineOutputSub?.cancel();
+    _bellSub?.cancel();
+    _clipSub?.cancel();
     _ime.detach();
     _pty?.kill();
-    _client?.dispose();
+    _engine?.title.removeListener(_syncTitle);
+    _engine?.dispose();
     _outputSub = null;
+    _engineOutputSub = null;
+    _bellSub = null;
+    _clipSub = null;
     _pty = null;
-    _client = null;
+    _engine = null;
     _exitCode = null;
     _errorMessage = null;
     _start(_cols, _rows);
@@ -302,7 +323,7 @@ class _TerminalScreenState extends State<TerminalScreen>
         _searchOpen = !_searchOpen;
         if (!_searchOpen) _searchInvalid = false;
       });
-      if (!_searchOpen) _client?.searchClear();
+      if (!_searchOpen) _engine?.searchClear();
       return KeyEventResult.handled;
     }
     if (hw.isControlPressed && !hw.isShiftPressed && !hw.isAltPressed) {
@@ -332,7 +353,7 @@ class _TerminalScreenState extends State<TerminalScreen>
     if (hw.isControlPressed &&
         hw.isShiftPressed &&
         event.logicalKey == LogicalKeyboardKey.keyC) {
-      final text = _client?.binding.selectionText();
+      final text = _engine?.selectionText();
       if (text != null && text.isNotEmpty) {
         Clipboard.setData(ClipboardData(text: text));
       }
@@ -361,7 +382,7 @@ class _TerminalScreenState extends State<TerminalScreen>
     );
     if (bytes == null) return KeyEventResult.ignored;
     _onTerminalInputStart();
-    _pty?.write(bytes);
+    _engine?.write(bytes);
     return KeyEventResult.handled;
   }
 
@@ -373,10 +394,10 @@ class _TerminalScreenState extends State<TerminalScreen>
   void _onTerminalInputStart() {
     final scrolledBack = _grid.displayOffset != 0;
     if (scrolledBack) {
-      _client?.scrollToBottom();
+      _engine?.scrollToBottom();
     }
     if (_selectionActive) {
-      _client?.binding.selectionClear();
+      _engine?.selectionClear();
       _selectionActive = false;
       if (!scrolledBack) _refreshSelection();
     }
@@ -384,10 +405,10 @@ class _TerminalScreenState extends State<TerminalScreen>
 
   void _searchChanged(String pattern) {
     if (pattern.isEmpty) {
-      _client?.searchClear();
+      _engine?.searchClear();
       setState(() => _searchInvalid = false);
     } else {
-      final ok = _client?.searchSet(pattern) ?? false;
+      final ok = _engine?.searchSet(pattern) ?? false;
       setState(() => _searchInvalid = !ok);
     }
   }
@@ -397,26 +418,23 @@ class _TerminalScreenState extends State<TerminalScreen>
       _searchOpen = false;
       _searchInvalid = false;
     });
-    _client?.searchClear();
+    _engine?.searchClear();
   }
 
   Future<void> _paste() async {
     final data = await Clipboard.getData('text/plain');
     final text = data?.text;
-    if (text == null || text.isEmpty || _pty == null) return;
+    if (text == null || text.isEmpty || _engine == null) return;
     _onTerminalInputStart();
-    _pty!.write(pasteBytes(text, modeFlags: _grid.modeFlags));
+    _engine!.write(pasteBytes(text, modeFlags: _grid.modeFlags));
   }
 
   Future<void> _showContextMenu(Offset local, Offset global) async {
     final (r, c, _) = _cellAt(local);
-    final selText = _client?.binding.selectionText() ?? '';
+    final selText = _engine?.selectionText() ?? '';
     String? hyperUri;
-    if (_client != null &&
-        _grid.rows > r &&
-        _grid.columns > c &&
-        isHyperlink(_grid.flagsAt(r, c))) {
-      hyperUri = _client!.resolveHyperlink(_grid.hyperlinkIdAt(r, c));
+    if (_engine != null) {
+      hyperUri = _engine!.hyperlinkAt(r, c);
     }
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
@@ -467,7 +485,7 @@ class _TerminalScreenState extends State<TerminalScreen>
     if (paths.isEmpty) return;
     final joined = paths.map(_shellQuote).join(' ');
     _onTerminalInputStart();
-    _pty?.write(pasteBytes(joined, modeFlags: _grid.modeFlags));
+    _engine?.write(pasteBytes(joined, modeFlags: _grid.modeFlags));
   }
 
   @visibleForTesting
@@ -478,13 +496,13 @@ class _TerminalScreenState extends State<TerminalScreen>
       ));
 
   void _reportFocus() {
-    if (_pty == null || !focusReport(_grid.modeFlags)) {
+    if (_engine == null || !focusReport(_grid.modeFlags)) {
       _lastFocused = _focus.hasFocus;
       return;
     }
     if (_focus.hasFocus == _lastFocused) return;
     _lastFocused = _focus.hasFocus;
-    _pty!.write(Uint8List.fromList(
+    _engine!.write(Uint8List.fromList(
         _focus.hasFocus ? [0x1b, 0x5b, 0x49] : [0x1b, 0x5b, 0x4f])); // ESC[I / ESC[O
   }
 
@@ -505,7 +523,7 @@ class _TerminalScreenState extends State<TerminalScreen>
 
   void _writeCommittedText(String t) {
     if (t.isEmpty) return;
-    _pty?.write(Uint8List.fromList(utf8.encode(t)));
+    _engine?.write(Uint8List.fromList(utf8.encode(t)));
   }
 
   void _reportCaretRectToIme() {
@@ -544,15 +562,15 @@ class _TerminalScreenState extends State<TerminalScreen>
   }
 
   void _refreshSelection() {
-    if (_client == null) return;
+    if (_engine == null) return;
     // Selection changes FLAG_SELECTED on cells whose content didn't change, so
     // partial damage misses them — re-render from a full snapshot (searched when
     // search is active so FLAG_MATCH* are preserved).
-    _client!.refreshView();
+    _engine!.refreshView();
   }
 
   void _reportMouse(Offset local, int button, MouseAction action) {
-    if (_client == null) return;
+    if (_engine == null) return;
     final col = (local.dx / _metrics.width).floor().clamp(0, _cols - 1) + 1;
     final row = (local.dy / _metrics.height).floor().clamp(0, _rows - 1) + 1;
     final hw = HardwareKeyboard.instance;
@@ -561,7 +579,7 @@ class _TerminalScreenState extends State<TerminalScreen>
         alt: hw.isAltPressed,
         ctrl: hw.isControlPressed,
         modeFlags: _grid.modeFlags);
-    if (bytes != null) _pty?.write(bytes);
+    if (bytes != null) _engine?.write(bytes);
   }
 
   int _btn(int buttons) => (buttons & kSecondaryButton) != 0
@@ -585,10 +603,10 @@ class _TerminalScreenState extends State<TerminalScreen>
     } else if (_grid.modeFlags & kModeAltScreen != 0) {
       final arrow = up ? [0x1b, 0x4f, 0x41] : [0x1b, 0x4f, 0x42];
       for (var i = 0; i < n; i++) {
-        _pty?.write(Uint8List.fromList(arrow));
+        _engine?.write(Uint8List.fromList(arrow));
       }
     } else {
-      _client?.scrollLines(up ? n : -n);
+      _engine?.scrollLines(up ? n : -n);
     }
   }
 
@@ -603,9 +621,13 @@ class _TerminalScreenState extends State<TerminalScreen>
     _blinkTimer?.cancel();
     _blinkOn.dispose();
     _outputSub?.cancel();
+    _engineOutputSub?.cancel();
+    _bellSub?.cancel();
+    _clipSub?.cancel();
     _pty?.kill();
-    _client?.dispose();
-    _grid.dispose();
+    _engine?.title.removeListener(_syncTitle);
+    _engine?.dispose();
+    _placeholderGrid.dispose();
     _focus.removeListener(_reportFocus);
     _focus.removeListener(_handleImeFocusChange);
     _ime.detach(notify: false);
@@ -643,19 +665,16 @@ class _TerminalScreenState extends State<TerminalScreen>
                 // Ctrl + left-click on a hyperlink cell → launch URI.
                 if (hw.isControlPressed && e.buttons & kPrimaryButton != 0) {
                   final (r, c, _) = _cellAt(e.localPosition);
-                  if (_client != null && isHyperlink(_grid.flagsAt(r, c))) {
-                    final id = _grid.hyperlinkIdAt(r, c);
-                    final uri = _client!.resolveHyperlink(id);
-                    if (uri != null) {
-                      _launch(uri);
-                      return;
-                    }
+                  final uri = _engine?.hyperlinkAt(r, c);
+                  if (uri != null) {
+                    _launch(uri);
+                    return;
                   }
                 }
                 final localSelect =
                     !anyMouse(_grid.modeFlags) || HardwareKeyboard.instance.isShiftPressed;
                 if (localSelect &&
-                    _client != null &&
+                    _engine != null &&
                     e.buttons & kPrimaryButton != 0) {
                   final now = DateTime.now();
                   _clickCount = (now.difference(_lastClick).inMilliseconds <
@@ -664,7 +683,7 @@ class _TerminalScreenState extends State<TerminalScreen>
                       : 1;
                   _lastClick = now;
                   final (r, c, rh) = _cellAt(e.localPosition);
-                  _client!.binding.selectionStart(r, c, rh, _clickCount - 1);
+                  _engine!.selectionStart(r, c, rh, _clickCount - 1);
                   _selecting = true;
                   _selectionActive = true;
                   _refreshSelection();
@@ -674,7 +693,7 @@ class _TerminalScreenState extends State<TerminalScreen>
                     e.buttons & kMiddleMouseButton != 0 &&
                     _primary.isNotEmpty) {
                   _onTerminalInputStart();
-                  _pty?.write(pasteBytes(_primary, modeFlags: _grid.modeFlags));
+                  _engine?.write(pasteBytes(_primary, modeFlags: _grid.modeFlags));
                   return;
                 }
                 if (e.buttons & kSecondaryButton != 0 &&
@@ -687,9 +706,9 @@ class _TerminalScreenState extends State<TerminalScreen>
               },
               onPointerMove: (e) {
                 if (e.kind != PointerDeviceKind.mouse) return;
-                if (_selecting && _client != null) {
+                if (_selecting && _engine != null) {
                   final (r, c, rh) = _cellAt(e.localPosition);
-                  _client!.binding.selectionUpdate(r, c, rh);
+                  _engine!.selectionUpdate(r, c, rh);
                   _refreshSelection();
                   return;
                 }
@@ -704,9 +723,9 @@ class _TerminalScreenState extends State<TerminalScreen>
               },
               onPointerUp: (e) {
                 if (e.kind != PointerDeviceKind.mouse) return;
-                if (_selecting && _client != null) {
+                if (_selecting && _engine != null) {
                   _selecting = false;
-                  _primary = _client!.binding.selectionText() ?? '';
+                  _primary = _engine!.selectionText() ?? '';
                   return;
                 }
                 _reportMouse(e.localPosition, _pressedButton, MouseAction.up);
@@ -722,11 +741,11 @@ class _TerminalScreenState extends State<TerminalScreen>
                 if (_grid.modeFlags & kModeAltScreen != 0) {
                   final arrow = up ? [0x1b, 0x4f, 0x41] : [0x1b, 0x4f, 0x42]; // SS3 A/B
                   for (var i = 0; i < 3; i++) {
-                    _pty?.write(Uint8List.fromList(arrow));
+                    _engine?.write(Uint8List.fromList(arrow));
                   }
                   return;
                 }
-                _client?.scrollLines(
+                _engine?.scrollLines(
                     up ? _config.scrolling.multiplier : -_config.scrolling.multiplier);
               },
               // Precision trackpad two-finger pan (PointerDeviceKind.trackpad):
@@ -748,8 +767,8 @@ class _TerminalScreenState extends State<TerminalScreen>
                     return;
                   }
                   _focus.requestFocus();
-                  if (_client != null && _selectionActive) {
-                    _client!.binding.selectionClear();
+                  if (_engine != null && _selectionActive) {
+                    _engine!.selectionClear();
                     _selectionActive = false;
                     _refreshSelection();
                   }
@@ -774,23 +793,23 @@ class _TerminalScreenState extends State<TerminalScreen>
                 onLongPressStart: (e) {
                   _stopFling();
                   _focus.requestFocus();
-                  if (_client == null) return;
+                  if (_engine == null) return;
                   final (r, c, rh) = _cellAt(e.localPosition);
-                  _client!.binding.selectionStart(r, c, rh, 0);
+                  _engine!.selectionStart(r, c, rh, 0);
                   _selecting = true;
                   _selectionActive = true;
                   _refreshSelection();
                 },
                 onLongPressMoveUpdate: (e) {
-                  if (_client == null) return;
+                  if (_engine == null) return;
                   final (r, c, rh) = _cellAt(e.localPosition);
-                  _client!.binding.selectionUpdate(r, c, rh);
+                  _engine!.selectionUpdate(r, c, rh);
                   _refreshSelection();
                 },
                 onLongPressEnd: (e) {
-                  if (_client == null) return;
+                  if (_engine == null) return;
                   _selecting = false;
-                  _primary = _client!.binding.selectionText() ?? '';
+                  _primary = _engine!.selectionText() ?? '';
                 },
                 child: Stack(
                 children: [
@@ -854,8 +873,8 @@ class _TerminalScreenState extends State<TerminalScreen>
                         visible: _searchOpen,
                         invalidPattern: _searchInvalid,
                         onChanged: _searchChanged,
-                        onNext: () => _client?.searchNext(),
-                        onPrev: () => _client?.searchPrev(),
+                        onNext: () => _engine?.searchNext(),
+                        onPrev: () => _engine?.searchPrev(),
                         onClose: _closeSearch,
                       ),
                     ),
