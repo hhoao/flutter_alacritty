@@ -37,20 +37,6 @@ Rect cursorRect(int shape, double cellWidth, double cellHeight, double lineWidth
   }
 }
 
-/// Override the cell's effective colors when it carries a search-match flag.
-/// Focused match wins over plain match; otherwise the input pair is returned
-/// unchanged. Pure — exposed for unit testing the match-highlight invariant.
-({int fg, int bg}) applySearchOverride(
-    int flags, ({int fg, int bg}) ec, SearchColors colors) {
-  if (flags & kFlagMatchCurrent != 0) {
-    return (fg: colors.focusedFg, bg: colors.focusedBg);
-  }
-  if (flags & kFlagMatch != 0) {
-    return (fg: colors.matchFg, bg: colors.matchBg);
-  }
-  return ec;
-}
-
 /// Background/foreground for hint-highlighted (hyperlink) cells.
 class HintColors {
   const HintColors({required this.bg, required this.fg});

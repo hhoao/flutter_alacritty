@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_alacritty/config/terminal_config.dart';
@@ -16,13 +17,14 @@ import 'package:flutter_alacritty/ui/terminal_screen.dart';
 class _FakePty implements PtyBackend {
   final _out = StreamController<Uint8List>.broadcast();
   final exit = Completer<int>();
+  final writes = <Uint8List>[];
   bool killed = false;
   @override
   Stream<Uint8List> get output => _out.stream;
   @override
   Future<int> get exitCode => exit.future;
   @override
-  void write(Uint8List data) {}
+  void write(Uint8List data) => writes.add(data);
   @override
   void resize(int rows, int columns) {}
   @override
@@ -39,6 +41,9 @@ class _ClearOnTapBinding extends _FakeBinding {
 class _FakeBinding implements EngineBinding {
   int scrollCalls = 0;
   int selStartCalls = 0;
+  /// Forwarded into emitted GridUpdates so tests can flip kModeBracketedPaste
+  /// etc. on the mirror grid via the existing refresh path.
+  int modeFlags = 0;
   final Map<(int, int), int> hyperlinkAt = {};
   final Map<int, String> hyperlinkUris = {};
 
@@ -52,6 +57,7 @@ class _FakeBinding implements EngineBinding {
           flags: Uint16List(1),
         )],
         cursorRow: 0, cursorCol: 0, cursorVisible: true,
+        modeFlags: modeFlags,
       );
 
   GridUpdate _hyperlinkSnapshot() {
@@ -88,6 +94,7 @@ class _FakeBinding implements EngineBinding {
       cursorRow: 0,
       cursorCol: 0,
       cursorVisible: false,
+      modeFlags: modeFlags,
     );
   }
 
@@ -536,6 +543,58 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.pump();
     expect(find.text('Copy'), findsNothing);
+    title.dispose();
+  });
+
+  // Regression net for c9053a6: that font-zoom commit silently rewrote the
+  // build() child chain in a way that lost the DropTarget wrapping AND
+  // erased this test. 6b6f535 restored the implementation; we restore the
+  // test here so any future re-rewrite of build() fails CI.
+  testWidgets('DropTarget is wired into the widget tree', (tester) async {
+    final title = ValueNotifier<String>('t');
+    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+      title: title,
+      ptyFactory: ({required rows, required columns}) => _FakePty(),
+      engineFactory: ({
+        required columns, required rows,
+        required onPtyWrite, required onTitle,
+        required onBell, required onClipboard, required engineConfig,
+      }) => _FakeBinding(),
+    )));
+    await tester.pump();
+    expect(find.byType(DropTarget), findsOneWidget);
+    title.dispose();
+  });
+
+  testWidgets('drop writes shell-quoted, bracketed-paste-encoded paths', (tester) async {
+    final title = ValueNotifier<String>('t');
+    final pty = _FakePty();
+    final binding = _FakeBinding()..modeFlags = (1 << 4); // kModeBracketedPaste
+    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+      title: title,
+      ptyFactory: ({required rows, required columns}) => pty,
+      engineFactory: ({
+        required columns, required rows,
+        required onPtyWrite, required onTitle,
+        required onBell, required onClipboard, required engineConfig,
+      }) => binding,
+    )));
+    await tester.pump();
+    // Sync engine mode flags into the mirror grid (same path as selection refresh).
+    await tester.tap(find.byType(CustomPaint).first);
+    await tester.pump();
+    final state = tester.state<State<TerminalScreen>>(find.byType(TerminalScreen));
+    (state as dynamic).simulateDrop([
+      DropItemFile('/tmp/plain'),
+      DropItemFile('/tmp/with space'),
+    ]);
+    await tester.pump();
+    final bytes = pty.writes.expand((e) => e).toList();
+    final written = String.fromCharCodes(bytes);
+    expect(written.contains('\x1b[200~'), isTrue);
+    expect(written.contains('/tmp/plain'), isTrue);
+    expect(written.contains("'/tmp/with space'"), isTrue);
+    expect(written.contains('\x1b[201~'), isTrue);
     title.dispose();
   });
 }

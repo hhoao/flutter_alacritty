@@ -389,7 +389,7 @@ class _TerminalScreenState extends State<TerminalScreen>
             }
           },
         ),
-        PopupMenuItem(child: const Text('Paste'), onTap: _paste),
+        PopupMenuItem(onTap: _paste, child: const Text('Paste')),
         if (hyperUri != null) ...[
           PopupMenuItem(
             child: const Text('Open Hyperlink'),

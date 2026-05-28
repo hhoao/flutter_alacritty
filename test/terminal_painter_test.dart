@@ -105,46 +105,41 @@ void main() {
     expect(isSelected(grid.flagsAt(0, 1)), isFalse);
   });
 
-  group('applySearchOverride precedence with hyperlink', () {
+  group('applyMatchOrHint precedence', () {
     const search = SearchColors(
-      matchBg: 0xAC4242, matchFg: 0x181818, focusedBg: 0xF4BF75, focusedFg: 0x181818);
+        matchBg: 0xAC4242, matchFg: 0x181818, focusedBg: 0xF4BF75, focusedFg: 0x181818);
     const hint = HintColors(bg: 0xF4BF75, fg: 0x181818);
     const base = (fg: 0xD8D8D8, bg: 0x222222);
+
+    test('no match/hint flag passes the base pair through', () {
+      expect(applyMatchOrHint(0, base, search, hint), base);
+    });
     test('FLAG_HYPERLINK alone uses hint colors', () {
       final r = applyMatchOrHint(kFlagHyperlink, base, search, hint);
       expect(r.bg, 0xF4BF75);
+      expect(r.fg, 0x181818);
+    });
+    test('FLAG_MATCH alone returns the matches colors', () {
+      final r = applyMatchOrHint(kFlagMatch, base, search, hint);
+      expect(r.bg, 0xAC4242);
+      expect(r.fg, 0x181818);
     });
     test('FLAG_MATCH wins over FLAG_HYPERLINK', () {
       final r = applyMatchOrHint(kFlagMatch | kFlagHyperlink, base, search, hint);
       expect(r.bg, 0xAC4242);
     });
-    test('FLAG_MATCH_CURRENT wins over both', () {
-      final r = applyMatchOrHint(
-          kFlagMatchCurrent | kFlagMatch | kFlagHyperlink, base, search, hint);
-      expect(r.bg, 0xF4BF75); // focused matches background
-    });
-  });
-
-  group('applySearchOverride', () {
-    const cells = SearchColors(
-      matchBg: 0xAC4242, matchFg: 0x181818, focusedBg: 0xF4BF75, focusedFg: 0x181818);
-    const base = (fg: 0xD8D8D8, bg: 0x222222);
-
-    test('no match flag passes the base pair through', () {
-      expect(applySearchOverride(0, base, cells), base);
-    });
-    test('FLAG_MATCH alone returns the matches colors', () {
-      final r = applySearchOverride(kFlagMatch, base, cells);
-      expect(r.bg, 0xAC4242);
-      expect(r.fg, 0x181818);
-    });
-    test('FLAG_MATCH_CURRENT returns the focused colors (wins over plain match)', () {
-      final r = applySearchOverride(kFlagMatch | kFlagMatchCurrent, base, cells);
+    test('FLAG_MATCH_CURRENT wins over plain match', () {
+      final r = applyMatchOrHint(kFlagMatch | kFlagMatchCurrent, base, search, hint);
       expect(r.bg, 0xF4BF75);
       expect(r.fg, 0x181818);
     });
     test('current-match alone (without plain match bit) still picks focused', () {
-      final r = applySearchOverride(kFlagMatchCurrent, base, cells);
+      final r = applyMatchOrHint(kFlagMatchCurrent, base, search, hint);
+      expect(r.bg, 0xF4BF75);
+    });
+    test('FLAG_MATCH_CURRENT wins over both match and hyperlink', () {
+      final r = applyMatchOrHint(
+          kFlagMatchCurrent | kFlagMatch | kFlagHyperlink, base, search, hint);
       expect(r.bg, 0xF4BF75);
     });
   });

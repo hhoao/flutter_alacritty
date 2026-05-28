@@ -15,7 +15,7 @@
 | **2K — Ctrl+click** | `4147e4c` | `MouseRegion` click cursor on hyperlink cells; Ctrl+left-click resolves URI via `engine_resolve_hyperlink` → `url_launcher`; injectable `UrlLauncher` for tests |
 | **2M — drag-drop** | `9cceab8` | `desktop_drop` `DropTarget`; paths shell-quoted (single-quote when needed), space-joined; written through `pasteBytes` (bracketed-paste when enabled) |
 | **2M — font zoom** | `c9053a6` | `Ctrl+=` / `Ctrl+-` / `Ctrl+0`; step ±1.0 clamped [6, 72]; `_metrics` / `_glyphs` / `_grid` rebuilt; prior `GlyphCache` disposed |
-| **2M — drag-drop restore** | `6b6f535` | Re-applied `DropTarget` wrapper after font-zoom commit accidentally dropped it |
+| **2M — drag-drop restore** | `6b6f535` | Restored `DropTarget` wrapper + `_onDrop` + `_shellQuote` + `simulateDrop` + the `desktop_drop` import — `c9053a6` had silently rewritten the `build()` child chain and lost the entire drag-drop feature plus its widget test. **6b6f535 restored the implementation but left the regression test gap**; the test (`drop writes shell-quoted, …`) + a new `find.byType(DropTarget)` smoke assertion were restored in the post-review pass below so any future single-file `build()` rewrite fails CI |
 | **2M — context menu** | `929dc23` | gnome-terminal-style right-click menu: Copy (enabled iff selection), Paste, Search…; Open Hyperlink / Copy Hyperlink Address when on hyperlink cell; Shift+right-click bypasses menu (forwards button-2 to program) |
 | **2M — visual bell** | `a1e8e96` | `BellConfig { color, duration, animation }`; `[bell]` TOML parsing; `FadeTransition` overlay on `EngineEvent::Bell` when `duration > 0`; `@visibleForTesting` helpers for widget smoke test |
 | **Task 8 — docs/config** | *(this commit)* | `[colors.hints.start]` + `[bell]` appended to `flutter_alacritty.toml.example`; acceptance findings |
@@ -61,10 +61,10 @@ Sample keys documented in `flutter_alacritty.toml.example`.
 
 | Check | Result |
 |-------|--------|
-| `cargo test` (`packages/rust_lib_flutter_alacritty/rust`) | **Pass** — 29 tests (6 new hyperlink/hint tests) |
+| `cargo test` (`packages/rust_lib_flutter_alacritty/rust`) | **Pass** — 29 tests (5 new hyperlink/hint tests) |
 | `flutter build linux --debug` | **Pass** — `build/linux/x64/debug/bundle/flutter_alacritty` |
-| `flutter analyze lib/ test/ integration_test/` | **Pass (info only)** — 1 info: `sort_child_properties_last` in `terminal_screen.dart:392` (pre-existing style lint; no errors/warnings) |
-| `flutter test` | **Pass** — 111 tests |
+| `flutter analyze lib/ test/ integration_test/` | **Pass** — clean (post-review fix removed the `sort_child_properties_last` info in `terminal_screen.dart:392` by reordering one `PopupMenuItem`) |
+| `flutter test` | **Pass** — 113 tests (111 + 2 restored drag-drop regression tests) |
 
 ### New / extended test coverage (highlights)
 
@@ -95,7 +95,13 @@ Pointers to later plans — not shipped here:
 2. **OSC 7 cwd reporting** — working-directory tracking for smarter link/context behavior; see Plan 2L.
 3. **OSC 9 desktop notifications** — forward terminal notification sequences to the host OS; see Plan 2N.
 4. **IME preedit overlay** — compose-string rendering for CJK input methods; see Plan 2O.
-5. **`sort_child_properties_last` lint** — cosmetic analyzer info in `terminal_screen.dart`; optional cleanup.
+5. **Hint URI interning on `take_damage` partial path** (`engine.rs:359-360`) — `RegexIter` runs over the full visible region but cells are written only for partial rows; matches landing outside the partial set still call `intern_hyperlink`, growing the URI table slightly. Bounded by hint-matches-per-frame and dedup via `hyperlink_ids`; acceptable.
+
+## Post-review fixes (code-review pass, 2026-05-28)
+
+- **Dead code:** removed `applySearchOverride` from `lib/render/terminal_painter.dart` — superseded by `applyMatchOrHint`; ported the two test groups in `test/terminal_painter_test.dart` into one `applyMatchOrHint precedence` group (7 cases covering base/hyperlink/match/focused-match and the three precedence orderings).
+- **Drag-drop regression net:** the font-zoom commit `c9053a6` had silently dropped the entire drag-drop feature **and** its widget test along with `_FakePty.writes` / `_FakeBinding.modeFlags` plumbing in the test fakes. `6b6f535` restored only the implementation. This pass restored: (a) `_FakePty.writes` field + `write()` recording, (b) `_FakeBinding.modeFlags` field threaded into `_blank()` and `_hyperlinkSnapshot()` so the mirror grid actually sees `kModeBracketedPaste` during the test, (c) the `drop writes shell-quoted, bracketed-paste-encoded paths` widget test, and (d) a new `DropTarget is wired into the widget tree` smoke test (`find.byType(DropTarget)`) so any future `build()` rewrite that loses the wrap fails CI immediately.
+- **Analyzer info:** reordered one `PopupMenuItem` (line 392) to put `child:` last — `flutter analyze` is now zero-issue.
 
 ## Spec coverage
 
