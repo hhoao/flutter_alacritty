@@ -30,6 +30,14 @@ white = "#eeeeec"
 [colors.selection]
 background = "#3a6ea5"
 
+[colors.search.matches]
+background = "#ac4242"
+foreground = "#181818"
+
+[colors.search.focused_match]
+background = "#f4bf75"
+foreground = "#181818"
+
 [font]
 family = "DejaVu Sans Mono"
 fallback = ["Noto Sans Mono CJK SC", "WenQuanYi Zen Hei Mono", "monospace"]
