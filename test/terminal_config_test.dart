@@ -42,6 +42,30 @@ void main() {
     expect(TerminalConfig.defaults().selectionOverlay, 0x553A6EA5);
   });
 
+  test('search colors default to alacritty values', () {
+    final c = TerminalConfig.defaults().colors;
+    expect(c.searchMatchBg, 0xAC4242);
+    expect(c.searchMatchFg, 0x181818);
+    expect(c.searchFocusedBg, 0xF4BF75);
+    expect(c.searchFocusedFg, 0x181818);
+  });
+
+  test('fromTomlString reads search colors', () {
+    const toml = '''
+[colors.search.matches]
+background = "#112233"
+foreground = "#445566"
+[colors.search.focused_match]
+background = "#778899"
+foreground = "#aabbcc"
+''';
+    final c = TerminalConfig.fromTomlString(toml).colors;
+    expect(c.searchMatchBg, 0x112233);
+    expect(c.searchMatchFg, 0x445566);
+    expect(c.searchFocusedBg, 0x778899);
+    expect(c.searchFocusedFg, 0xAABBCC);
+  });
+
   test('top-level copyWith overrides one section only', () {
     final base = TerminalConfig.defaults();
     final c = base.copyWith(cursor: const CursorConfig(blinkInterval: 100));

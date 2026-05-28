@@ -7,30 +7,60 @@ import '../src/rust/engine.dart' show EngineConfig;
 import 'color_parse.dart';
 
 /// Foreground/background/selection (packed 0x00RRGGBB) + the 16 ANSI colors.
+/// Opaque fg/bg pairs passed to the terminal painter for search highlights.
+class SearchMatchColors {
+  const SearchMatchColors({
+    required this.matchBg,
+    required this.matchFg,
+    required this.focusedBg,
+    required this.focusedFg,
+  });
+  final int matchBg;
+  final int matchFg;
+  final int focusedBg;
+  final int focusedFg;
+}
+
 class TerminalColors {
   const TerminalColors({
     required this.background,
     required this.foreground,
     required this.selection,
     required this.ansi,
+    required this.searchMatchBg,
+    required this.searchMatchFg,
+    required this.searchFocusedBg,
+    required this.searchFocusedFg,
   });
 
   final int background;
   final int foreground;
   final int selection;
   final List<int> ansi; // length 16
+  final int searchMatchBg;
+  final int searchMatchFg;
+  final int searchFocusedBg;
+  final int searchFocusedFg;
 
   TerminalColors copyWith({
     int? background,
     int? foreground,
     int? selection,
     List<int>? ansi,
+    int? searchMatchBg,
+    int? searchMatchFg,
+    int? searchFocusedBg,
+    int? searchFocusedFg,
   }) =>
       TerminalColors(
         background: background ?? this.background,
         foreground: foreground ?? this.foreground,
         selection: selection ?? this.selection,
         ansi: ansi ?? this.ansi,
+        searchMatchBg: searchMatchBg ?? this.searchMatchBg,
+        searchMatchFg: searchMatchFg ?? this.searchMatchFg,
+        searchFocusedBg: searchFocusedBg ?? this.searchFocusedBg,
+        searchFocusedFg: searchFocusedFg ?? this.searchFocusedFg,
       );
 }
 
@@ -111,6 +141,10 @@ class TerminalConfig {
             0x000000, 0xCC0000, 0x4E9A06, 0xC4A000, 0x3465A4, 0x75507B, 0x06989A, 0xD3D7CF,
             0x555753, 0xEF2929, 0x8AE234, 0xFCE94F, 0x729FCF, 0xAD7FA8, 0x34E2E2, 0xEEEEEC,
           ],
+          searchMatchBg: 0xAC4242,
+          searchMatchFg: 0x181818,
+          searchFocusedBg: 0xF4BF75,
+          searchFocusedFg: 0x181818,
         ),
         font: FontConfig(
           family: 'DejaVu Sans Mono',
@@ -149,6 +183,14 @@ class TerminalConfig {
   /// Translucent overlay color (ARGB) the painter draws over selected cells.
   int get selectionOverlay => 0x55000000 | (colors.selection & 0xFFFFFF);
 
+  /// Opaque fg/bg pairs for search match highlighting (alacritty replaces cell colors).
+  SearchMatchColors get searchMatchColors => SearchMatchColors(
+        matchBg: colors.searchMatchBg,
+        matchFg: colors.searchMatchFg,
+        focusedBg: colors.searchFocusedBg,
+        focusedFg: colors.searchFocusedFg,
+      );
+
   /// Palette + scrollback handed to the Rust engine. palette is length 18:
   /// [0..15] ANSI, [16] fg, [17] bg.
   EngineConfig get engineConfig => EngineConfig(
@@ -180,6 +222,9 @@ class TerminalConfig {
     final normal = section(colorsM, 'normal');
     final bright = section(colorsM, 'bright');
     final selectionM = section(colorsM, 'selection');
+    final searchM = section(colorsM, 'search');
+    final matchesM = section(searchM, 'matches');
+    final focusedM = section(searchM, 'focused_match');
 
     const names = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'];
     final ansi = List<int>.generate(16, (i) {
@@ -222,6 +267,10 @@ class TerminalConfig {
         foreground: color(primary, 'foreground', d.colors.foreground),
         selection: color(selectionM, 'background', d.colors.selection),
         ansi: ansi,
+        searchMatchBg: color(matchesM, 'background', d.colors.searchMatchBg),
+        searchMatchFg: color(matchesM, 'foreground', d.colors.searchMatchFg),
+        searchFocusedBg: color(focusedM, 'background', d.colors.searchFocusedBg),
+        searchFocusedFg: color(focusedM, 'foreground', d.colors.searchFocusedFg),
       ),
       font: FontConfig(
         family: str(fontM, 'family', d.font.family),
