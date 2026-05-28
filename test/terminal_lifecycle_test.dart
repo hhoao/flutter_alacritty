@@ -61,6 +61,16 @@ class _FakeBinding implements EngineBinding {
   @override
   String? selectionText() => null;
   @override
+  bool searchSet(String pattern) => false;
+  @override
+  bool searchNext() => false;
+  @override
+  bool searchPrev() => false;
+  @override
+  void searchClear() {}
+  @override
+  GridUpdate fullSnapshotSearched() => _blank();
+  @override
   void dispose() {}
 }
 

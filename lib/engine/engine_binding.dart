@@ -19,12 +19,18 @@ abstract class EngineBinding {
   void resize(int columns, int rows);
   /// Full viewport snapshot (sync). Used after resize when damage is `Full`.
   GridUpdate fullSnapshot();
+  /// Full viewport snapshot with search match flags applied.
+  GridUpdate fullSnapshotSearched();
   Future<void> scrollLines(int delta);
   Future<void> scrollToBottom();
   void selectionStart(int displayRow, int col, bool rightHalf, int kind);
   void selectionUpdate(int displayRow, int col, bool rightHalf);
   void selectionClear();
   String? selectionText();
+  bool searchSet(String pattern);
+  bool searchNext();
+  bool searchPrev();
+  void searchClear();
   void dispose();
 }
 
@@ -79,6 +85,10 @@ class FrbEngineBinding implements EngineBinding {
   GridUpdate fullSnapshot() => _toGridUpdate(engineFullSnapshot(engine: _engine));
 
   @override
+  GridUpdate fullSnapshotSearched() =>
+      _toGridUpdate(engineFullSnapshotSearched(engine: _engine));
+
+  @override
   void resize(int columns, int rows) =>
       engineResize(engine: _engine, columns: columns, rows: rows);
 
@@ -113,6 +123,19 @@ class FrbEngineBinding implements EngineBinding {
 
   @override
   String? selectionText() => engineSelectionText(engine: _engine);
+
+  @override
+  bool searchSet(String pattern) =>
+      engineSearchSet(engine: _engine, pattern: pattern);
+
+  @override
+  bool searchNext() => engineSearchNext(engine: _engine);
+
+  @override
+  bool searchPrev() => engineSearchPrev(engine: _engine);
+
+  @override
+  void searchClear() => engineSearchClear(engine: _engine);
 
   @override
   void dispose() {}

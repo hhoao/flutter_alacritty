@@ -35,6 +35,41 @@ class TerminalEngineClient {
   bool _advancing = false;
   int? _pendingColumns;
   int? _pendingRows;
+  bool _searchActive = false;
+
+  /// Re-applies the current viewport (searched snapshot while search is active),
+  /// used by selection refresh and search navigation. Search highlight changes
+  /// FLAG_MATCH on cells whose content didn't change, so a full snapshot is needed.
+  void refreshView() {
+    _grid.apply(
+      _searchActive ? _binding.fullSnapshotSearched() : _binding.fullSnapshot(),
+    );
+    SchedulerBinding.instance.scheduleFrame();
+  }
+
+  bool searchSet(String pattern) {
+    _searchActive = _binding.searchSet(pattern);
+    refreshView();
+    return _searchActive;
+  }
+
+  bool searchNext() {
+    final ok = _binding.searchNext();
+    refreshView();
+    return ok;
+  }
+
+  bool searchPrev() {
+    final ok = _binding.searchPrev();
+    refreshView();
+    return ok;
+  }
+
+  void searchClear() {
+    _binding.searchClear();
+    _searchActive = false;
+    refreshView();
+  }
 
   void feed(Uint8List bytes) {
     _buf.add(bytes);
@@ -96,16 +131,12 @@ class TerminalEngineClient {
 
   Future<void> scrollLines(int delta) async {
     await _binding.scrollLines(delta);
-    // Scroll changes the view, not cell content, so damage is empty/partial at
-    // offset 0 — re-render the whole viewport from a full snapshot.
-    _grid.apply(_binding.fullSnapshot());
-    SchedulerBinding.instance.scheduleFrame();
+    refreshView();
   }
 
   Future<void> scrollToBottom() async {
     await _binding.scrollToBottom();
-    _grid.apply(_binding.fullSnapshot()); // view moved back to bottom -> full render
-    SchedulerBinding.instance.scheduleFrame();
+    refreshView();
   }
 
   void dispose() => _binding.dispose();

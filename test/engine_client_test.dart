@@ -4,6 +4,68 @@ import 'package:flutter_alacritty/engine/engine_binding.dart';
 import 'package:flutter_alacritty/engine/terminal_engine_client.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
 
+class _SearchFake implements EngineBinding {
+  String? lastSet;
+  int searchedSnapshots = 0;
+  bool cleared = false;
+  GridUpdate _empty() => GridUpdate(
+        full: true,
+        rows: 0,
+        columns: 0,
+        lines: const [],
+        cursorRow: 0,
+        cursorCol: 0,
+        cursorVisible: false,
+      );
+  @override
+  bool searchSet(String p) {
+    lastSet = p;
+    return true;
+  }
+
+  @override
+  bool searchNext() => true;
+  @override
+  bool searchPrev() => true;
+  @override
+  void searchClear() {
+    cleared = true;
+  }
+
+  @override
+  GridUpdate fullSnapshotSearched() {
+    searchedSnapshots++;
+    return _empty();
+  }
+
+  @override
+  GridUpdate fullSnapshot() => _empty();
+  @override
+  Future<void> advance(Uint8List b) async {}
+  @override
+  Future<GridUpdate> takeDamage() async => _empty();
+  @override
+  Future<GridUpdate> advanceAndTakeDamage(Uint8List b) async => _empty();
+  @override
+  void pumpEvents() {}
+  @override
+  void resize(int c, int r) {}
+  @override
+  Future<void> scrollLines(int d) async {}
+  @override
+  Future<void> scrollToBottom() async {}
+  @override
+  void selectionStart(int r, int c, bool rh, int k) {}
+  @override
+  void selectionUpdate(int r, int c, bool rh) {}
+  @override
+  void selectionClear() {}
+  @override
+  String? selectionText() => null;
+  @override
+  void dispose() {}
+}
+
 class _FakeBinding implements EngineBinding {
   int advanceCalls = 0;
   int resizeCalls = 0;
@@ -54,6 +116,16 @@ class _FakeBinding implements EngineBinding {
   void selectionClear() {}
   @override
   String? selectionText() => null;
+  @override
+  bool searchSet(String pattern) => false;
+  @override
+  bool searchNext() => false;
+  @override
+  bool searchPrev() => false;
+  @override
+  void searchClear() {}
+  @override
+  GridUpdate fullSnapshotSearched() => fullSnapshot();
   @override
   void dispose() {}
 }
@@ -116,5 +188,20 @@ void main() {
     expect(binding.lastResizeRows, 10);
     expect(grid.rows, 10);
     expect(grid.columns, 40);
+  });
+
+  test('searchSet activates the searched snapshot and refreshes', () async {
+    final binding = _SearchFake();
+    final grid = MirrorGrid();
+    final client = TerminalEngineClient(
+      binding: binding,
+      grid: grid,
+      schedule: (cb) => cb(),
+    );
+    client.searchSet('foo');
+    expect(binding.lastSet, 'foo');
+    expect(binding.searchedSnapshots, 1);
+    client.searchClear();
+    expect(binding.cleared, isTrue);
   });
 }
