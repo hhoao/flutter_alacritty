@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +22,32 @@ import '../render/glyph_cache.dart';
 import '../render/mirror_grid.dart';
 import '../render/terminal_painter.dart';
 import 'search_bar.dart';
+
+String _shellQuote(String s) {
+  const needs = [
+    ' ',
+    '\t',
+    '\'',
+    '"',
+    r'$',
+    '`',
+    r'\',
+    '*',
+    '?',
+    '|',
+    '&',
+    ';',
+    '<',
+    '>',
+    '(',
+    ')',
+    '#',
+    '!',
+    '~',
+  ];
+  if (!needs.any(s.contains)) return s;
+  return "'${s.replaceAll("'", r"'\''")}'";
+}
 
 typedef PtyFactory = PtyBackend Function({
   required int rows,
@@ -65,12 +92,13 @@ class _TerminalScreenState extends State<TerminalScreen> {
   late final UrlLauncher _launch = widget.launchUrl ??
       (u) async => launcher.launchUrl(Uri.parse(u));
   late final TerminalConfig _config = widget.config ?? TerminalConfig.defaults();
-  late final TextStyle _style = _config.textStyle;
-  late final CellMetrics _metrics = CellMetrics.measure(_style);
-  late final GlyphCache _glyphs = GlyphCache(
+  late double _fontSize = _config.font.size;
+  late TextStyle _style = _config.textStyle.copyWith(fontSize: _fontSize);
+  late CellMetrics _metrics = CellMetrics.measure(_style);
+  late GlyphCache _glyphs = GlyphCache(
     fontFamily: _config.font.family,
     fontFamilyFallback: _config.font.fallback,
-    fontSize: _config.font.size,
+    fontSize: _fontSize,
     cellWidth: _metrics.width,
     lineHeight: _config.font.lineHeight,
   );
@@ -198,6 +226,24 @@ class _TerminalScreenState extends State<TerminalScreen> {
     SystemSound.play(SystemSoundType.alert);
   }
 
+  void _setZoom(double next) {
+    final clamped = next.clamp(6.0, 72.0);
+    if (clamped == _fontSize) return;
+    setState(() {
+      _fontSize = clamped;
+      _glyphs.dispose();
+      _style = _config.textStyle.copyWith(fontSize: _fontSize);
+      _metrics = CellMetrics.measure(_style);
+      _glyphs = GlyphCache(
+        fontFamily: _config.font.family,
+        fontFamilyFallback: _config.font.fallback,
+        fontSize: _fontSize,
+        cellWidth: _metrics.width,
+        lineHeight: _config.font.lineHeight,
+      );
+    });
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored; // ignore key-up so a stray release can't restart
@@ -220,6 +266,23 @@ class _TerminalScreenState extends State<TerminalScreen> {
       });
       if (!_searchOpen) _client?.searchClear();
       return KeyEventResult.handled;
+    }
+    if (hw.isControlPressed && !hw.isShiftPressed && !hw.isAltPressed) {
+      if (event.logicalKey == LogicalKeyboardKey.equal ||
+          event.logicalKey == LogicalKeyboardKey.numpadAdd) {
+        _setZoom(_fontSize + 1.0);
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.minus ||
+          event.logicalKey == LogicalKeyboardKey.numpadSubtract) {
+        _setZoom(_fontSize - 1.0);
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.digit0 ||
+          event.logicalKey == LogicalKeyboardKey.numpad0) {
+        _setZoom(_config.font.size);
+        return KeyEventResult.handled;
+      }
     }
     if (_searchOpen) return KeyEventResult.ignored;
     if (hw.isControlPressed &&
@@ -278,6 +341,20 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (text == null || text.isEmpty || _pty == null) return;
     _pty!.write(pasteBytes(text, modeFlags: _grid.modeFlags));
   }
+
+  Future<void> _onDrop(DropDoneDetails details) async {
+    final paths = details.files.map((f) => f.path).where((p) => p.isNotEmpty);
+    if (paths.isEmpty) return;
+    final joined = paths.map(_shellQuote).join(' ');
+    _pty?.write(pasteBytes(joined, modeFlags: _grid.modeFlags));
+  }
+
+  @visibleForTesting
+  void simulateDrop(List<DropItem> files) => _onDrop(DropDoneDetails(
+        files: files,
+        localPosition: Offset.zero,
+        globalPosition: Offset.zero,
+      ));
 
   void _reportFocus() {
     if (_pty == null || !focusReport(_grid.modeFlags)) {
@@ -387,7 +464,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
             focusNode: _focus,
             autofocus: true,
             onKeyEvent: _onKey,
-            child: Listener(
+            child: DropTarget(
+              onDragDone: _onDrop,
+              child: Listener(
               onPointerDown: (e) {
                 if (e.kind != PointerDeviceKind.mouse) return;
                 if (_status != TermStatus.running) {
@@ -610,6 +689,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 ],
               ),
               ),
+            ),
             ),
           );
         },
