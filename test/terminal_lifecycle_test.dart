@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +28,9 @@ class _FakePty implements PtyBackend {
 }
 
 class _FakeBinding implements EngineBinding {
+  int scrollCalls = 0;
+  int selStartCalls = 0;
+
   GridUpdate _blank() => GridUpdate(
         full: true, rows: 1, columns: 1,
         lines: [LineCells(
@@ -51,11 +55,15 @@ class _FakeBinding implements EngineBinding {
   @override
   void resize(int columns, int rows) {}
   @override
-  Future<void> scrollLines(int delta) async {}
+  Future<void> scrollLines(int delta) async {
+    scrollCalls++;
+  }
   @override
   Future<void> scrollToBottom() async {}
   @override
-  void selectionStart(int displayRow, int col, bool rightHalf, int kind) {}
+  void selectionStart(int displayRow, int col, bool rightHalf, int kind) {
+    selStartCalls++;
+  }
   @override
   void selectionUpdate(int displayRow, int col, bool rightHalf) {}
   @override
@@ -175,6 +183,61 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
     expect(find.byType(TerminalSearchBar), findsOneWidget);
+    title.dispose();
+  });
+
+  testWidgets('one-finger drag scrolls', (tester) async {
+    final title = ValueNotifier<String>('t');
+    final binding = _FakeBinding();
+    await tester.pumpWidget(MaterialApp(
+      home: TerminalScreen(
+        title: title,
+        ptyFactory: ({required rows, required columns}) => _FakePty(),
+        engineFactory: ({
+          required columns,
+          required rows,
+          required onPtyWrite,
+          required onTitle,
+          required onBell,
+          required onClipboard,
+          required engineConfig,
+        }) => binding,
+      ),
+    ));
+    await tester.pump();
+    await tester.drag(
+      find.byType(CustomPaint).first,
+      const Offset(0, -60),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump();
+    expect(binding.scrollCalls, greaterThan(0));
+    title.dispose();
+  });
+
+  testWidgets('long-press selects', (tester) async {
+    final title = ValueNotifier<String>('t');
+    final binding = _FakeBinding();
+    await tester.pumpWidget(MaterialApp(
+      home: TerminalScreen(
+        title: title,
+        ptyFactory: ({required rows, required columns}) => _FakePty(),
+        engineFactory: ({
+          required columns,
+          required rows,
+          required onPtyWrite,
+          required onTitle,
+          required onBell,
+          required onClipboard,
+          required engineConfig,
+        }) => binding,
+      ),
+    ));
+    await tester.pump();
+    final center = tester.getCenter(find.byType(CustomPaint).first);
+    await tester.longPressAt(center);
+    await tester.pump();
+    expect(binding.selStartCalls, greaterThan(0));
     title.dispose();
   });
 }

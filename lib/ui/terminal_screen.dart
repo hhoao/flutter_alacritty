@@ -99,6 +99,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
   int? _exitCode;
   String? _errorMessage;
   bool _searchOpen = false;
+  double _touchScrollAccum = 0;
+  Timer? _flingTimer;
 
   // Repaint is driven by CustomPaint(repaint: _grid): MirrorGrid.apply() notifies,
   // RenderCustomPaint marks needs-paint, and the client requests a frame when it
@@ -300,8 +302,36 @@ class _TerminalScreenState extends State<TerminalScreen> {
           ? 1
           : 0;
 
+  void _touchScrollBy(double dy) {
+    _touchScrollAccum += dy;
+    final lines = _touchScrollAccum ~/ _metrics.height;
+    if (lines == 0) return;
+    _touchScrollAccum -= lines * _metrics.height;
+    // Dragging content down (positive dy) reveals older lines → scroll up.
+    final up = lines > 0;
+    final n = lines.abs();
+    if (anyMouse(_grid.modeFlags)) {
+      for (var i = 0; i < n; i++) {
+        _reportMouse(Offset.zero, 0, up ? MouseAction.scrollUp : MouseAction.scrollDown);
+      }
+    } else if (_grid.modeFlags & kModeAltScreen != 0) {
+      final arrow = up ? [0x1b, 0x4f, 0x41] : [0x1b, 0x4f, 0x42];
+      for (var i = 0; i < n; i++) {
+        _pty?.write(Uint8List.fromList(arrow));
+      }
+    } else {
+      _client?.scrollLines(up ? n : -n);
+    }
+  }
+
+  void _stopFling() {
+    _flingTimer?.cancel();
+    _flingTimer = null;
+  }
+
   @override
   void dispose() {
+    _flingTimer?.cancel();
     _blinkTimer?.cancel();
     _blinkOn.dispose();
     _outputSub?.cancel();
@@ -328,6 +358,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
             onKeyEvent: _onKey,
             child: Listener(
               onPointerDown: (e) {
+                if (e.kind != PointerDeviceKind.mouse) return;
                 if (_status != TermStatus.running) {
                   _restart();
                   return;
@@ -360,6 +391,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 _reportMouse(e.localPosition, _pressedButton, MouseAction.down);
               },
               onPointerMove: (e) {
+                if (e.kind != PointerDeviceKind.mouse) return;
                 if (_selecting && _client != null) {
                   final (r, c, rh) = _cellAt(e.localPosition);
                   _client!.binding.selectionUpdate(r, c, rh);
@@ -376,6 +408,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 }
               },
               onPointerUp: (e) {
+                if (e.kind != PointerDeviceKind.mouse) return;
                 if (_selecting && _client != null) {
                   _selecting = false;
                   _primary = _client!.binding.selectionText() ?? '';
@@ -401,7 +434,59 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 _client?.scrollLines(
                     up ? _config.scrolling.multiplier : -_config.scrolling.multiplier);
               },
-              child: Stack(
+              child: GestureDetector(
+                supportedDevices: const {PointerDeviceKind.touch},
+                behavior: HitTestBehavior.translucent,
+                onTapDown: (_) => _stopFling(),
+                onTap: () {
+                  if (_status != TermStatus.running) {
+                    _restart();
+                    return;
+                  }
+                  _focus.requestFocus();
+                  if (_client != null) {
+                    _client!.binding.selectionClear();
+                    _refreshSelection();
+                  }
+                },
+                onVerticalDragStart: (_) {
+                  _stopFling();
+                  _touchScrollAccum = 0;
+                },
+                onVerticalDragUpdate: (e) => _touchScrollBy(e.delta.dy),
+                onVerticalDragEnd: (e) {
+                  var v = e.primaryVelocity ?? 0;
+                  if (v.abs() < 200) return;
+                  _flingTimer = Timer.periodic(const Duration(milliseconds: 16), (t) {
+                    v *= 0.92;
+                    if (v.abs() < 40) {
+                      _stopFling();
+                      return;
+                    }
+                    _touchScrollBy(v * 0.016);
+                  });
+                },
+                onLongPressStart: (e) {
+                  _stopFling();
+                  _focus.requestFocus();
+                  if (_client == null) return;
+                  final (r, c, rh) = _cellAt(e.localPosition);
+                  _client!.binding.selectionStart(r, c, rh, 0);
+                  _selecting = true;
+                  _refreshSelection();
+                },
+                onLongPressMoveUpdate: (e) {
+                  if (_client == null) return;
+                  final (r, c, rh) = _cellAt(e.localPosition);
+                  _client!.binding.selectionUpdate(r, c, rh);
+                  _refreshSelection();
+                },
+                onLongPressEnd: (e) {
+                  if (_client == null) return;
+                  _selecting = false;
+                  _primary = _client!.binding.selectionText() ?? '';
+                },
+                child: Stack(
                 children: [
                   CustomPaint(
                     size: Size.infinite,
@@ -454,6 +539,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                       ),
                     ),
                 ],
+              ),
               ),
             ),
           );
