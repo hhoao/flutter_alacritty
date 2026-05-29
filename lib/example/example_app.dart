@@ -153,7 +153,7 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     try {
       final pty = (widget.ptyFactory ??
           ({required int rows, required int columns}) =>
-              FlutterPtyBackend(rows: rows, columns: columns))(
+              FlutterPtyBackend(rows: rows, columns: columns, shell: _config.shell))(
         rows: rows,
         columns: cols,
       );
