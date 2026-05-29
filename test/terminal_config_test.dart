@@ -233,6 +233,16 @@ cursor = "#fefefe"
     expect(c.colors.cursorBody, 0xFEFEFE);
   });
 
+  test('theme exposes cursor text/body colors', () {
+    final c = TerminalConfig.fromTomlString('''
+[colors.cursor]
+text = "#101010"
+cursor = "#fefefe"
+''');
+    expect(c.theme.cursorText, 0x101010);
+    expect(c.theme.cursorColor, 0xFEFEFE);
+  });
+
   test('missing/malformed sections keep defaults', () {
     final c = TerminalConfig.fromTomlString('[font]\nsize = "oops"\n');
     final d = TerminalConfig.defaults();

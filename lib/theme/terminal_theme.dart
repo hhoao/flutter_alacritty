@@ -88,12 +88,18 @@ class TerminalStyle {
     this.fallback = const <String>[],
     this.size = 14.0,
     this.lineHeight = 1.0,
+    this.boldFamily,
+    this.italicFamily,
+    this.boldItalicFamily,
   });
 
   final String family;
   final List<String> fallback;
   final double size;
   final double lineHeight;
+  final String? boldFamily;
+  final String? italicFamily;
+  final String? boldItalicFamily;
 
   /// Build the [TextStyle] the renderer measures cells from.
   TextStyle toTextStyle() => TextStyle(
@@ -108,11 +114,17 @@ class TerminalStyle {
     List<String>? fallback,
     double? size,
     double? lineHeight,
+    String? boldFamily,
+    String? italicFamily,
+    String? boldItalicFamily,
   }) =>
       TerminalStyle(
         family: family ?? this.family,
         fallback: fallback ?? this.fallback,
         size: size ?? this.size,
         lineHeight: lineHeight ?? this.lineHeight,
+        boldFamily: boldFamily ?? this.boldFamily,
+        italicFamily: italicFamily ?? this.italicFamily,
+        boldItalicFamily: boldItalicFamily ?? this.boldItalicFamily,
       );
 }

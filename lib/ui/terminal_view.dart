@@ -209,13 +209,7 @@ class TerminalViewState extends State<TerminalView>
     _style = widget.textStyle.toTextStyle().copyWith(fontSize: _fontSize);
     _metrics = CellMetrics.measure(_style);
     widget.engine.setCellPixels(_metrics.width.round(), _metrics.height.round());
-    _glyphs = GlyphCache(
-      fontFamily: widget.textStyle.family,
-      fontFamilyFallback: widget.textStyle.fallback,
-      fontSize: _fontSize,
-      cellWidth: _metrics.width,
-      lineHeight: widget.textStyle.lineHeight,
-    );
+    _glyphs = _newGlyphCache();
     _bellCtrl = AnimationController(
       vsync: this,
       duration: widget.bellDuration > Duration.zero
@@ -270,7 +264,29 @@ class TerminalViewState extends State<TerminalView>
           ? widget.bellDuration
           : const Duration(milliseconds: 1);
     }
+    if (oldWidget.textStyle != widget.textStyle) {
+      setState(() {
+        _fontSize = widget.textStyle.size;
+        _glyphs.dispose();
+        _style = widget.textStyle.toTextStyle().copyWith(fontSize: _fontSize);
+        _metrics = CellMetrics.measure(_style);
+        widget.engine.setCellPixels(
+            _metrics.width.round(), _metrics.height.round());
+        _glyphs = _newGlyphCache();
+      });
+    }
   }
+
+  GlyphCache _newGlyphCache() => GlyphCache(
+        fontFamily: widget.textStyle.family,
+        fontFamilyFallback: widget.textStyle.fallback,
+        boldFamily: widget.textStyle.boldFamily,
+        italicFamily: widget.textStyle.italicFamily,
+        boldItalicFamily: widget.textStyle.boldItalicFamily,
+        fontSize: _fontSize,
+        cellWidth: _metrics.width,
+        lineHeight: widget.textStyle.lineHeight,
+      );
 
   @override
   void dispose() {
@@ -309,13 +325,7 @@ class TerminalViewState extends State<TerminalView>
       _style = widget.textStyle.toTextStyle().copyWith(fontSize: _fontSize);
       _metrics = CellMetrics.measure(_style);
       widget.engine.setCellPixels(_metrics.width.round(), _metrics.height.round());
-      _glyphs = GlyphCache(
-        fontFamily: widget.textStyle.family,
-        fontFamilyFallback: widget.textStyle.fallback,
-        fontSize: _fontSize,
-        cellWidth: _metrics.width,
-        lineHeight: widget.textStyle.lineHeight,
-      );
+      _glyphs = _newGlyphCache();
     });
   }
 

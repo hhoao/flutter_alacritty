@@ -92,15 +92,14 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   late final bool _ownsTitle = widget.title == null;
   late final UrlLauncher _launch = widget.launchUrl ??
       (u) async => launcher.launchUrl(Uri.parse(u));
-  late final TerminalConfig _config = widget.config ?? TerminalConfig.defaults();
-  late final (Map<ShortcutActivator, Intent>, Map<Type, Action<Intent>>) _binds =
+  late TerminalConfig _config = widget.config ?? TerminalConfig.defaults();
+  late (Map<ShortcutActivator, Intent>, Map<Type, Action<Intent>>) _binds =
       bindingsToShortcuts(_config.keyboard.bindings);
   // Cell metrics drive the cols/rows the engine is spawned/resized into. We
   // compute them once here from the textStyle so layoutBuilder→_ensureStarted
   // and the nested TerminalView agree on sizing (both derive from the same
   // measured style).
-  late final CellMetrics _metrics =
-      CellMetrics.measure(_config.textStyle.copyWith(fontSize: _config.font.size));
+  late CellMetrics _metrics = _measureMetrics(_config);
 
   TerminalEngine? _engine;
   TerminalController _controller = TerminalController();
@@ -122,10 +121,8 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   final GlobalKey<State<TerminalView>> _viewKey =
       GlobalKey<State<TerminalView>>();
 
-  @override
-  void initState() {
-    super.initState();
-  }
+  CellMetrics _measureMetrics(TerminalConfig config) => CellMetrics.measure(
+      config.textStyle.copyWith(fontSize: config.font.size));
 
   /// Mirror engine.title → host-visible notifier.
   void _syncTitle() {
@@ -154,6 +151,11 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   }
 
   void _start(int cols, int rows) {
+    if (_config.window.opacity != 1.0 ||
+        _config.window.decorations != 'full') {
+      debugPrint('flutter_alacritty: window.opacity/decorations are host-applied; '
+          'see linux/runner for native window setup (config-only here)');
+    }
     try {
       final pty = (widget.ptyFactory ??
           ({required int rows, required int columns}) =>
@@ -349,10 +351,14 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
       backgroundColor: Color(0xFF000000 | _config.colors.background),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final cols =
-              (constraints.maxWidth / _metrics.width).floor().clamp(1, 1000);
-          final rows =
-              (constraints.maxHeight / _metrics.height).floor().clamp(1, 1000);
+          final padX = _config.window.padding.x;
+          final padY = _config.window.padding.y;
+          final availW =
+              (constraints.maxWidth - 2 * padX).clamp(0.0, double.infinity);
+          final availH =
+              (constraints.maxHeight - 2 * padY).clamp(0.0, double.infinity);
+          final cols = (availW / _metrics.width).floor().clamp(1, 1000);
+          final rows = (availH / _metrics.height).floor().clamp(1, 1000);
           WidgetsBinding.instance
               .addPostFrameCallback((_) => _ensureStarted(cols, rows));
           return DropTarget(
@@ -387,6 +393,9 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                         controller: _controller,
                         theme: _config.theme,
                         textStyle: _config.style,
+                        padding: EdgeInsets.symmetric(
+                            horizontal: _config.window.padding.x,
+                            vertical: _config.window.padding.y),
                         focusNode: _focus,
                         autofocus: true,
                         cursorBlinkInterval: Duration(

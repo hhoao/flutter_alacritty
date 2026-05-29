@@ -477,6 +477,9 @@ class TerminalConfig {
         fallback: font.fallback,
         size: font.size,
         lineHeight: font.lineHeight,
+        boldFamily: font.bold?.family,
+        italicFamily: font.italic?.family,
+        boldItalicFamily: font.boldItalic?.family,
       );
 
   /// Palette + scrollback handed to the Rust engine. palette is length 18:
@@ -594,6 +597,15 @@ class TerminalConfig {
       return null;
     }
 
+    FontStyleConfig? fontStyleFrom(Map m, String key) {
+      final v = m[key];
+      if (v is! Map) return null;
+      return FontStyleConfig(
+        family: strOrNull(v, 'family'),
+        style: strOrNull(v, 'style'),
+      );
+    }
+
     final rawBindings = <RawKeyBinding>[];
     final kb = map['keyboard'];
     final rawList = (kb is Map && kb['bindings'] is List)
@@ -632,6 +644,9 @@ class TerminalConfig {
         fallback: fallbackList(),
         size: dbl(fontM, 'size', d.font.size),
         lineHeight: dbl(fontM, 'line_height', d.font.lineHeight),
+        bold: fontStyleFrom(fontM, 'bold') ?? d.font.bold,
+        italic: fontStyleFrom(fontM, 'italic') ?? d.font.italic,
+        boldItalic: fontStyleFrom(fontM, 'bold_italic') ?? d.font.boldItalic,
       ),
       cursor: CursorConfig(
         blinkInterval: integer(cursorM, 'blink_interval', d.cursor.blinkInterval),

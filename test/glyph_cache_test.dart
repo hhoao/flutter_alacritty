@@ -4,6 +4,17 @@ import 'package:flutter_alacritty/render/glyph_cache.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('selects bold family for bold cells when configured', () {
+    final cache = GlyphCache(
+      fontFamily: 'Base',
+      fontSize: 14,
+      cellWidth: 8,
+      boldFamily: 'BaseBold',
+    );
+    expect(cache.familyForStyle(bold: true, italic: false), 'BaseBold');
+    expect(cache.familyForStyle(bold: false, italic: false), 'Base');
+  });
+
   test('same key returns the identical cached paragraph', () {
     final cache = GlyphCache(fontFamily: 'monospace', fontSize: 14, cellWidth: 8, maxEntries: 4);
     final a = cache.tryGet('A'.codeUnitAt(0), 0xFFFFFF);
