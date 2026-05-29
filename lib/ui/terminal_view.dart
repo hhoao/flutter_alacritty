@@ -260,6 +260,10 @@ class TerminalViewState extends State<TerminalView>
       _bellSub?.cancel();
       _bellSub = widget.engine.bell.listen((_) => _flashBell());
       _lastReportedCaretRect = null;
+      // TeamPilot-style hosts swap engines per member while the view keeps the
+      // same layout cols/rows. _ensureSizing would skip onViewportResize, leaving
+      // a PTY started in the background at 80×24 while the painter is full-screen.
+      _syncViewportToHost(_cols, _rows);
     }
     // Re-attach controller / focus if the caller swapped them out. Rare; the
     // host typically creates both once.
@@ -561,6 +565,15 @@ class TerminalViewState extends State<TerminalView>
     _flingTimer = null;
   }
 
+  void _syncViewportToHost(int cols, int rows) {
+    if (cols <= 0 || rows <= 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _engine.resize(columns: cols, rows: rows);
+      widget.onViewportResize?.call(cols, rows);
+    });
+  }
+
   void _ensureSizing(int cols, int rows) {
     if (cols == _cols && rows == _rows) return;
     _cols = cols;
@@ -569,11 +582,7 @@ class TerminalViewState extends State<TerminalView>
     // zoom, window resize) → term.resize(). First layout must notify the host
     // too — otherwise PTY stays at whatever size the host guessed before the
     // view mounted (e.g. 80×24) while the painter uses a taller grid.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _engine.resize(columns: cols, rows: rows);
-      widget.onViewportResize?.call(cols, rows);
-    });
+    _syncViewportToHost(cols, rows);
   }
 
   @override
