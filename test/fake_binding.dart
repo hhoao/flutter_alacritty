@@ -10,10 +10,14 @@ import 'package:flutter_alacritty/render/mirror_grid.dart';
 /// `terminal_engine_test.dart`) can reuse the same shape.
 class FakeBinding implements RewireableEngineBinding {
   int scrollCalls = 0;
+  final List<int> scrollLinesArgs = [];
   int selStartCalls = 0;
   int selClearCalls = 0;
   int scrollToBottomCalls = 0;
   int fullSnapshotCalls = 0;
+  int resizeCalls = 0;
+  int lastResizeCols = 0;
+  int lastResizeRows = 0;
 
   /// Forwarded into emitted GridUpdates so tests can flip kModeBracketedPaste
   /// etc. on the mirror grid via the existing refresh path.
@@ -126,10 +130,15 @@ class FakeBinding implements RewireableEngineBinding {
   }
 
   @override
-  void resize(int columns, int rows) {}
+  void resize(int columns, int rows) {
+    resizeCalls++;
+    lastResizeCols = columns;
+    lastResizeRows = rows;
+  }
   @override
   Future<void> scrollLines(int delta) async {
     scrollCalls++;
+    scrollLinesArgs.add(delta);
   }
   @override
   Future<void> scrollToBottom() async {

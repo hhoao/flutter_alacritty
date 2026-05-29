@@ -307,6 +307,7 @@ void main() {
 
   testWidgets('Ctrl+= increases cellHeight, Ctrl+0 restores', (tester) async {
     final title = ValueNotifier<String>('t');
+    final binding = FakeBinding();
     await tester.pumpWidget(MaterialApp(home: ExampleTerminalApp(
       title: title,
       ptyFactory: ({required rows, required columns}) => _FakePty(),
@@ -314,7 +315,7 @@ void main() {
         required columns, required rows,
         required onPtyWrite, required onTitle,
         required onBell, required onClipboard, required engineConfig,
-      }) => FakeBinding(),
+      }) => binding,
     )));
     await tester.pump();
     double cellH() {
@@ -327,12 +328,17 @@ void main() {
     }
     final h0 = cellH();
     expect(h0, greaterThan(0));
+    await tester.pump(); // initial post-frame resize
+    final rowsBeforeZoom = binding.lastResizeRows;
+    expect(rowsBeforeZoom, greaterThan(0));
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.equal);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.equal);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
     expect(cellH(), greaterThan(h0));
+    await tester.pump(); // post-frame engine.resize after zoom
+    expect(binding.lastResizeRows, lessThan(rowsBeforeZoom));
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.digit0);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.digit0);

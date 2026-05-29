@@ -131,13 +131,8 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
 
   void _ensureStarted(int cols, int rows) {
     if (_engine != null) {
-      if ((cols != _cols || rows != _rows) && _status == TermStatus.running) {
-        _cols = cols;
-        _rows = rows;
-        _engine!.resize(columns: cols, rows: rows);
-        _pty!.resize(rows, cols);
-        _engine!.scrollToBottom();
-      }
+      // Viewport resize (incl. Ctrl+=/-/0 zoom) is driven by [TerminalView]
+      // via [onViewportResize] so cols/rows match zoomed cell metrics.
       return;
     }
     _cols = cols;
@@ -145,6 +140,13 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     if (_status != TermStatus.error) {
       _start(cols, rows);
     }
+  }
+
+  void _onViewportResize(int cols, int rows) {
+    if (_status != TermStatus.running) return;
+    _cols = cols;
+    _rows = rows;
+    _pty?.resize(rows, cols);
   }
 
   void _start(int cols, int rows) {
@@ -370,6 +372,7 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                       TerminalView(
                         _engine!,
                         key: _viewKey,
+                        onViewportResize: _onViewportResize,
                         controller: _controller,
                         theme: _config.theme,
                         textStyle: _config.style,

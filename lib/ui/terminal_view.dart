@@ -74,6 +74,7 @@ class TerminalView extends StatefulWidget {
     this.onSecondaryTapUp,
     this.onLinkActivate,
     this.onBell,
+    this.onViewportResize,
   });
 
   final TerminalEngine engine;
@@ -130,6 +131,10 @@ class TerminalView extends StatefulWidget {
   /// Bell event hook (fires in addition to the visual flash). If null, the
   /// view plays a system alert sound (current behavior).
   final void Function()? onBell;
+
+  /// Fired after [engine] is resized to match the view's cell grid (font zoom
+  /// or layout). Hosts should resize the PTY to the same `(columns, rows)`.
+  final void Function(int columns, int rows)? onViewportResize;
 
   @override
   State<TerminalView> createState() => TerminalViewState();
@@ -488,7 +493,7 @@ class TerminalViewState extends State<TerminalView>
         _writeToEngine(Uint8List.fromList(arrow));
       }
     } else {
-      _engine.scrollLines(up ? n : -n);
+      _engine.scrollBy(up ? n : -n);
     }
   }
 
@@ -498,10 +503,19 @@ class TerminalViewState extends State<TerminalView>
   }
 
   void _ensureSizing(int cols, int rows) {
-    if (cols != _cols || rows != _rows) {
-      _cols = cols;
-      _rows = rows;
-    }
+    if (cols == _cols && rows == _rows) return;
+    final firstLayout = _cols == 0 && _rows == 0;
+    _cols = cols;
+    _rows = rows;
+    if (firstLayout) return;
+    // Mirror alacritty display/mod.rs: font zoom changes cell size → new
+    // screen_lines/columns → term.resize(). Without this, scrollback offset
+    // is wrong relative to what we paint (engine still sized for pre-zoom grid).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _engine.resize(columns: cols, rows: rows);
+      widget.onViewportResize?.call(cols, rows);
+    });
   }
 
   @override
@@ -778,7 +792,7 @@ class TerminalViewState extends State<TerminalView>
       }
       return;
     }
-    _controller.scrollLines(
+    _engine.scrollBy(
         up ? widget.scrollMultiplier : -widget.scrollMultiplier);
   }
 
