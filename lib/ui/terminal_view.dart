@@ -44,8 +44,8 @@ class CellOffset {
 /// through Flutter's `Shortcuts` + `Actions` framework rather than an
 /// inline switch — see [shortcuts] and [actions]. Does NOT own the engine,
 /// the PTY, the search bar widget, drop handling, the right-click context
-/// menu, or URL launching — those stay on `TerminalScreen` (or a future
-/// host) and are wired in via the callback hooks below.
+/// menu, or URL launching — those stay on the host (the reference example
+/// is `ExampleTerminalApp`) and are wired in via the callback hooks below.
 class TerminalView extends StatefulWidget {
   const TerminalView(
     this.engine, {
@@ -118,7 +118,7 @@ class TerminalView extends StatefulWidget {
   /// custom paste filtering, etc.).
   final Map<Type, Action<Intent>>? actions;
 
-  // Pointer / hyperlink callback hooks — TerminalScreen wires these
+  // Pointer / hyperlink callback hooks — the host wires these
   // (context menu, URL launch). These cover screen-driven UI bits the
   // view itself can't decide.
   final void Function(TapDownDetails, CellOffset)? onTapDown;
@@ -173,7 +173,7 @@ class TerminalViewState extends State<TerminalView>
 
   // The painter and UI helpers read the grid directly; the engine owns the
   // grid (single source of truth), and the view never paints before the
-  // engine has been built (TerminalScreen gates this with its error/exit
+  // engine has been built (the host gates this with its error/exit
   // overlay).
   MirrorGrid get _grid => _engine.gridForView;
 

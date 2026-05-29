@@ -4,7 +4,7 @@ import '../engine/terminal_engine.dart';
 
 /// View-model layer between the [TerminalEngine] and the widget tree.
 ///
-/// Hosts state that was previously inline on `_TerminalScreenState`
+/// Hosts state that was previously inline on the screen widget's state
 /// (selection presence, primary-selection text, current search pattern and its
 /// validity) and notifies listeners on every transition so the view can rebuild
 /// the relevant slice without owning the state directly.

@@ -13,9 +13,9 @@ import 'terminal_engine_client.dart';
 /// The four callbacks are wired into private streams/notifiers on
 /// [TerminalEngine] — consumers never see the raw `on*` callbacks.
 ///
-/// Lives here (not in `terminal_screen.dart`) so the engine layer owns its
-/// own seam; UI re-exports it via the `TerminalScreen` constructor for back
-/// compat.
+/// Lives here so the engine layer owns its own seam; consumers that need a
+/// custom factory pass it via [TerminalEngine.new]. The reference consumer
+/// (`ExampleTerminalApp`) forwards it through its own constructor.
 typedef EngineFactory = EngineBinding Function({
   required int columns,
   required int rows,

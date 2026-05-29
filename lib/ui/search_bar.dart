@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// Bottom search bar: a text field plus prev/next/close. Pure UI — all terminal
-/// logic stays in TerminalScreen via the callbacks.
+/// logic stays in the host (e.g. `ExampleTerminalApp`) via the callbacks.
 class TerminalSearchBar extends StatefulWidget {
   const TerminalSearchBar({
     required this.visible,

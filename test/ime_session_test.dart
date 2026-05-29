@@ -87,7 +87,7 @@ void main() {
     final s = ImeSession(onCommit: commits.add, onPreeditChanged: preedits.add);
     // Mimic the production sequence: enter composing state, then the platform
     // tears the connection down (e.g. window blur, IM crash). The gate in
-    // TerminalScreen._onKey reads `isAttached && isComposing` — both must
+    // TerminalView._onKey reads `isAttached && isComposing` — both must
     // flip back to false so ASCII falls back to encodeKey.
     s.updateEditingValue(
       const TextEditingValue(text: 'ni', composing: TextRange(start: 0, end: 2)),

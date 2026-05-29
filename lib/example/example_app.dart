@@ -12,12 +12,9 @@ import '../input/paste.dart';
 import '../pty/flutter_pty_backend.dart';
 import '../pty/pty_backend.dart';
 import '../render/cell_metrics.dart';
-import 'search_bar.dart';
-import 'terminal_shortcuts.dart';
-import 'terminal_view.dart';
-
-// Re-exported so consumers keep importing the typedef from this file.
-export '../engine/terminal_engine.dart' show EngineFactory;
+import '../ui/search_bar.dart';
+import '../ui/terminal_shortcuts.dart';
+import '../ui/terminal_view.dart';
 
 String _shellQuote(String s) {
   const needs = [
@@ -54,9 +51,20 @@ typedef UrlLauncher = Future<bool> Function(String url);
 
 enum TermStatus { running, exited, error }
 
-class TerminalScreen extends StatefulWidget {
-  const TerminalScreen({
-    required this.title,
+/// Reference consumer of the `flutter_alacritty` library API.
+///
+/// Wires `FlutterPtyBackend` to `TerminalEngine` + `TerminalController` and
+/// renders `TerminalView` with the screen-level surface a real terminal needs:
+/// restart overlay on shell exit, search bar (Ctrl+Shift+F), drag-and-drop
+/// of file paths as bracketed-paste, right-click context menu with
+/// Copy/Paste/Search and hyperlink open, and url_launcher for clicked links.
+///
+/// Owns its own `MaterialApp` so callers can do `runApp(ExampleTerminalApp())`
+/// without an additional wrapper. The `title` notifier is optional — if not
+/// supplied, an internal one is created and mirrors `engine.title`.
+class ExampleTerminalApp extends StatefulWidget {
+  const ExampleTerminalApp({
+    this.title,
     this.ptyFactory,
     this.engineFactory,
     this.config,
@@ -64,17 +72,23 @@ class TerminalScreen extends StatefulWidget {
     super.key,
   });
 
-  final ValueNotifier<String> title;
+  /// Optional external title notifier. When null the example creates and
+  /// owns its own (and disposes it). Pass one when the host wants to observe
+  /// title changes (e.g. for window decorations or tests).
+  final ValueNotifier<String>? title;
   final PtyFactory? ptyFactory;
   final EngineFactory? engineFactory;
   final TerminalConfig? config;
   final UrlLauncher? launchUrl;
 
   @override
-  State<TerminalScreen> createState() => _TerminalScreenState();
+  State<ExampleTerminalApp> createState() => _ExampleTerminalAppState();
 }
 
-class _TerminalScreenState extends State<TerminalScreen> {
+class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
+  late final ValueNotifier<String> _title =
+      widget.title ?? ValueNotifier<String>('flutter_alacritty');
+  late final bool _ownsTitle = widget.title == null;
   late final UrlLauncher _launch = widget.launchUrl ??
       (u) async => launcher.launchUrl(Uri.parse(u));
   late final TerminalConfig _config = widget.config ?? TerminalConfig.defaults();
@@ -109,10 +123,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
     super.initState();
   }
 
-  /// Mirror engine.title → widget.title (consumer-facing notifier).
+  /// Mirror engine.title → host-visible notifier.
   void _syncTitle() {
     final e = _engine;
-    if (e != null) widget.title.value = e.title.value;
+    if (e != null) _title.value = e.title.value;
   }
 
   void _ensureStarted(int cols, int rows) {
@@ -322,6 +336,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _controller.dispose();
     _engine?.dispose();
     _focus.dispose();
+    if (_ownsTitle) _title.dispose();
     super.dispose();
   }
 
@@ -439,7 +454,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   /// Restart overlay: absorbs any tap / key and triggers `_restart`. Sits on
   /// top of the (possibly-mounted) TerminalView so the screen-level test
-  /// `tester.tap(find.byType(TerminalScreen))` triggers a restart even though
+  /// `tester.tap(find.byType(ExampleTerminalApp))` triggers a restart even though
   /// the view's listener is underneath.
   Widget _buildRestartLayer() {
     return Positioned.fill(

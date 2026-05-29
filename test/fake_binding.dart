@@ -5,7 +5,7 @@ import 'package:flutter_alacritty/render/cell_flags.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
 
 /// Shared fake [EngineBinding] used by widget/integration-style tests that
-/// drive `TerminalScreen` / `TerminalEngine` without the native engine.
+/// drive `ExampleTerminalApp` / `TerminalEngine` without the native engine.
 /// Lifted out of `terminal_lifecycle_test.dart` so other tests (e.g.
 /// `terminal_engine_test.dart`) can reuse the same shape.
 class FakeBinding implements RewireableEngineBinding {

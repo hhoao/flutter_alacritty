@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_alacritty/config/config_loader.dart';
 import 'package:flutter_alacritty/config/terminal_config.dart';
+import 'package:flutter_alacritty/example/example_app.dart';
 import 'package:flutter_alacritty/src/rust/frb_generated.dart';
-import 'package:flutter_alacritty/ui/terminal_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,9 +29,10 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    // `child` keeps [TerminalScreen] stable across title updates. Rebuilding home
-    // on every title change — after pumpEvents in the same drain as grid.apply —
-    // would reset paint state and drop pending repaints until lifecycle.
+    // `child` keeps [ExampleTerminalApp] stable across title updates. Rebuilding
+    // home on every title change — after pumpEvents in the same drain as
+    // grid.apply — would reset paint state and drop pending repaints until
+    // lifecycle.
     return ValueListenableBuilder<String>(
       valueListenable: _title,
       builder: (context, title, child) => MaterialApp(
@@ -39,7 +40,7 @@ class _MyAppState extends State<MyApp> {
         title: title,
         home: child,
       ),
-      child: TerminalScreen(title: _title, config: widget.config),
+      child: ExampleTerminalApp(title: _title, config: widget.config),
     );
   }
 }

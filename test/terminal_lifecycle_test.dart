@@ -12,7 +12,7 @@ import 'package:flutter_alacritty/pty/pty_backend.dart';
 import 'package:flutter_alacritty/render/terminal_painter.dart';
 import 'package:flutter_alacritty/ui/preedit_overlay.dart';
 import 'package:flutter_alacritty/ui/search_bar.dart';
-import 'package:flutter_alacritty/ui/terminal_screen.dart';
+import 'package:flutter_alacritty/example/example_app.dart';
 import 'package:flutter_alacritty/ui/terminal_view.dart';
 
 import 'fake_binding.dart';
@@ -52,7 +52,7 @@ void main() {
     }) => FakeBinding();
 
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: ValueNotifier('t'),
         ptyFactory: ptyFactory,
         engineFactory: engineFactory,
@@ -65,7 +65,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('process exited (0)'), findsOneWidget);
 
-    await tester.tap(find.byType(TerminalScreen)); // any input restarts
+    await tester.tap(find.byType(ExampleTerminalApp)); // any input restarts
     await tester.pumpAndSettle();
     expect(ptys.length, 2); // a fresh PTY was spawned
     expect(find.textContaining('process exited'), findsNothing);
@@ -75,7 +75,7 @@ void main() {
     PtyBackend boom({required int rows, required int columns}) =>
         throw StateError('no shell');
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: ValueNotifier('t'),
         ptyFactory: boom,
         engineFactory: ({required columns, required rows, required onPtyWrite, required onTitle, required onBell, required onClipboard, required engineConfig}) => FakeBinding(),
@@ -88,7 +88,7 @@ void main() {
   testWidgets('window background comes from config', (tester) async {
     final title = ValueNotifier<String>('t');
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         config: TerminalConfig.defaults()
             .copyWith(colors: TerminalConfig.defaults().colors.copyWith(background: 0x102030)),
@@ -113,7 +113,7 @@ void main() {
   testWidgets('invalid regex shows error indicator in search bar', (tester) async {
     final title = ValueNotifier<String>('t');
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         ptyFactory: ({required rows, required columns}) => _FakePty(),
         engineFactory: ({
@@ -139,7 +139,7 @@ void main() {
   testWidgets('Ctrl+Shift+F toggles the search bar', (tester) async {
     final title = ValueNotifier<String>('t');
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         ptyFactory: ({required rows, required columns}) => _FakePty(),
         engineFactory: ({
@@ -179,7 +179,7 @@ void main() {
     final title = ValueNotifier<String>('t');
     final binding = FakeBinding();
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         ptyFactory: ({required rows, required columns}) => _FakePty(),
         engineFactory: ({
@@ -208,7 +208,7 @@ void main() {
     final title = ValueNotifier<String>('t');
     var clears = 0;
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         ptyFactory: ({required rows, required columns}) => _FakePty(),
         engineFactory: ({
@@ -243,7 +243,7 @@ void main() {
     final title = ValueNotifier<String>('t');
     final binding = FakeBinding();
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         ptyFactory: ({required rows, required columns}) => _FakePty(),
         engineFactory: ({
@@ -272,7 +272,7 @@ void main() {
       ..hyperlinkUris[5] = 'https://example.com';
     String? launched;
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         ptyFactory: ({required rows, required columns}) => _FakePty(),
         engineFactory: ({
@@ -307,7 +307,7 @@ void main() {
 
   testWidgets('Ctrl+= increases cellHeight, Ctrl+0 restores', (tester) async {
     final title = ValueNotifier<String>('t');
-    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+    await tester.pumpWidget(MaterialApp(home: ExampleTerminalApp(
       title: title,
       ptyFactory: ({required rows, required columns}) => _FakePty(),
       engineFactory: ({
@@ -346,7 +346,7 @@ void main() {
       (tester) async {
     final title = ValueNotifier<String>('t');
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         ptyFactory: ({required rows, required columns}) => _FakePty(),
         engineFactory: ({
@@ -379,7 +379,7 @@ void main() {
       (tester) async {
     final title = ValueNotifier<String>('t');
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         config: TerminalConfig.defaults().copyWith(
           bell: const BellConfig(
@@ -416,7 +416,7 @@ void main() {
     final title = ValueNotifier<String>('t');
     final binding = FakeBinding();
     await tester.pumpWidget(MaterialApp(
-      home: TerminalScreen(
+      home: ExampleTerminalApp(
         title: title,
         ptyFactory: ({required rows, required columns}) => _FakePty(),
         engineFactory: ({
@@ -451,7 +451,7 @@ void main() {
   // test here so any future re-rewrite of build() fails CI.
   testWidgets('DropTarget is wired into the widget tree', (tester) async {
     final title = ValueNotifier<String>('t');
-    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+    await tester.pumpWidget(MaterialApp(home: ExampleTerminalApp(
       title: title,
       ptyFactory: ({required rows, required columns}) => _FakePty(),
       engineFactory: ({
@@ -469,7 +469,7 @@ void main() {
     final title = ValueNotifier<String>('t');
     final pty = _FakePty();
     final binding = FakeBinding()..modeFlags = (1 << 4); // kModeBracketedPaste
-    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+    await tester.pumpWidget(MaterialApp(home: ExampleTerminalApp(
       title: title,
       ptyFactory: ({required rows, required columns}) => pty,
       engineFactory: ({
@@ -488,7 +488,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byType(CustomPaint).first, kind: PointerDeviceKind.touch);
     await tester.pump();
-    final state = tester.state<State<TerminalScreen>>(find.byType(TerminalScreen));
+    final state = tester.state<State<ExampleTerminalApp>>(find.byType(ExampleTerminalApp));
     (state as dynamic).simulateDrop([
       DropItemFile('/tmp/plain'),
       DropItemFile('/tmp/with space'),
@@ -506,7 +506,7 @@ void main() {
   testWidgets('IME commit writes utf8 bytes to the PTY (raw, not bracketed)', (tester) async {
     final title = ValueNotifier<String>('t');
     final pty = _FakePty();
-    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+    await tester.pumpWidget(MaterialApp(home: ExampleTerminalApp(
       title: title,
       ptyFactory: ({required rows, required columns}) => pty,
       engineFactory: ({
@@ -532,7 +532,7 @@ void main() {
 
   testWidgets('PreeditOverlay mounts only while composing', (tester) async {
     final title = ValueNotifier<String>('t');
-    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+    await tester.pumpWidget(MaterialApp(home: ExampleTerminalApp(
       title: title,
       ptyFactory: ({required rows, required columns}) => _FakePty(),
       engineFactory: ({
@@ -558,7 +558,7 @@ void main() {
       (tester) async {
     final title = ValueNotifier<String>('t');
     final pty = _FakePty();
-    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+    await tester.pumpWidget(MaterialApp(home: ExampleTerminalApp(
       title: title,
       ptyFactory: ({required rows, required columns}) => pty,
       engineFactory: ({
@@ -589,7 +589,7 @@ void main() {
     final title = ValueNotifier<String>('t');
     final pty = _FakePty();
     final binding = FakeBinding();
-    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+    await tester.pumpWidget(MaterialApp(home: ExampleTerminalApp(
       title: title,
       ptyFactory: ({required rows, required columns}) => pty,
       engineFactory: ({
@@ -623,7 +623,7 @@ void main() {
     final title = ValueNotifier<String>('t');
     final pty = _FakePty();
     final binding = FakeBinding();
-    await tester.pumpWidget(MaterialApp(home: TerminalScreen(
+    await tester.pumpWidget(MaterialApp(home: ExampleTerminalApp(
       title: title,
       ptyFactory: ({required rows, required columns}) => pty,
       engineFactory: ({

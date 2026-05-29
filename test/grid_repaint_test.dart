@@ -33,7 +33,7 @@ void main() {
 
   // Regression guard for the idle-refresh bug: a plain CustomPaint(repaint: grid)
   // — with NO setState wrapper — must repaint when the grid notifies. This is why
-  // TerminalScreen can rely on `repaint: grid` alone (the client requests the frame).
+  // TerminalView can rely on `repaint: grid` alone (the client requests the frame).
   testWidgets('repaint: grid repaints CustomPaint on grid notify (no setState)',
       (tester) async {
     final grid = MirrorGrid();
