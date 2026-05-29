@@ -48,6 +48,8 @@ class _CountingFakeBinding implements EngineBinding {
   @override
   Future<void> scrollToBottom() async {}
   @override
+  void clearHistory() {}
+  @override
   void selectionStart(int displayRow, int col, bool rightHalf, int kind) {}
   @override
   void selectionUpdate(int displayRow, int col, bool rightHalf) {}

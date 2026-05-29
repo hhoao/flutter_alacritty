@@ -55,6 +55,8 @@ class _SearchFake implements EngineBinding {
   @override
   Future<void> scrollToBottom() async {}
   @override
+  void clearHistory() {}
+  @override
   void selectionStart(int r, int c, bool rh, int k) {}
   @override
   void selectionUpdate(int r, int c, bool rh) {}
@@ -110,6 +112,8 @@ class _FakeBinding implements EngineBinding {
   Future<void> scrollLines(int delta) async {}
   @override
   Future<void> scrollToBottom() async {}
+  @override
+  void clearHistory() {}
   @override
   void selectionStart(int displayRow, int col, bool rightHalf, int kind) {}
   @override
