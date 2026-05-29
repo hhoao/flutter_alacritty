@@ -102,7 +102,12 @@ class TerminalPainter extends CustomPainter {
     glyphs.beginFrame();
 
     // Pass 1: backgrounds (so a wide glyph isn't overwritten by the spacer's bg).
-    final bgPaint = Paint();
+    // No anti-aliasing: cell metrics are sub-pixel (cell_metrics.dart), so AA'd
+    // edges on adjacent same-color rects leave half-covered seams between every
+    // cell — a faint grid, worst on fractional DPR / fractional widget offsets
+    // when embedded. Solid pixel-aligned fills tile exactly (matches alacritty's
+    // background quads). Same reasoning for the selection / cursor fills below.
+    final bgPaint = Paint()..isAntiAlias = false;
     for (var row = 0; row < rows; row++) {
       final y = row * cellHeight;
       for (var col = 0; col < cols; col++) {
@@ -122,7 +127,9 @@ class TerminalPainter extends CustomPainter {
         if (isSelected(grid.flagsAt(row, col))) {
           canvas.drawRect(
             Rect.fromLTWH(col * cellWidth, y, cellWidth, cellHeight),
-            Paint()..color = Color(selectionColor),
+            Paint()
+              ..isAntiAlias = false
+              ..color = Color(selectionColor),
           );
         }
       }
@@ -205,7 +212,8 @@ class TerminalPainter extends CustomPainter {
       final shape = grid.cursorShape;
       if (shape == 0) {
         // Block: fill with ink, redraw the cell content in the bg color on top.
-        canvas.drawRect(Rect.fromLTWH(x, y, cw, cellHeight), Paint()..color = inkColor);
+        canvas.drawRect(Rect.fromLTWH(x, y, cw, cellHeight),
+            Paint()..isAntiAlias = false..color = inkColor);
         final cp = inBounds ? grid.codepointAt(cr, cc) : 32;
         if (cp != 32 && cp != 0) {
           final r = Rect.fromLTWH(x, y, cw, cellHeight);
@@ -230,7 +238,7 @@ class TerminalPainter extends CustomPainter {
       } else {
         // Beam (2) / underline (1): a solid ink-colored bar.
         final bar = cursorRect(shape, cw, cellHeight, lineWidth).translate(x, y);
-        canvas.drawRect(bar, Paint()..color = inkColor);
+        canvas.drawRect(bar, Paint()..isAntiAlias = false..color = inkColor);
       }
     }
   }
