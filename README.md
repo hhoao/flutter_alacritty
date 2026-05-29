@@ -20,7 +20,15 @@ dependencies:
   flutter_alacritty: ^1.0.0
 ```
 
+## Use as a library
+
+`flutter_alacritty` ships three public types: a `TerminalEngine` (the
+alacritty handle), a `TerminalController` (selection / search / scroll
+state), and a `TerminalView` widget. Wire any `PtyBackend` to the engine
+with two `Stream` subscriptions:
+
 ```dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_alacritty/flutter_alacritty.dart';
 import 'package:flutter_alacritty/src/rust/frb_generated.dart';
@@ -28,18 +36,49 @@ import 'package:flutter_alacritty/src/rust/frb_generated.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
-  runApp(
-    MaterialApp(
-      home: TerminalScreen(
-        title: ValueNotifier('my app'),
-        config: const TerminalConfig(),
-      ),
-    ),
-  );
+  runApp(const MaterialApp(home: _TerminalScaffold()));
+}
+
+class _TerminalScaffold extends StatefulWidget {
+  const _TerminalScaffold();
+  @override
+  State<_TerminalScaffold> createState() => _TerminalScaffoldState();
+}
+
+class _TerminalScaffoldState extends State<_TerminalScaffold> {
+  late final _engine = TerminalEngine(config: TerminalConfig.defaults());
+  late final _controller = TerminalController()..attach(_engine);
+  late final PtyBackend _pty = FlutterPtyBackend(rows: 24, columns: 80);
+  late final StreamSubscription _ptyIn = _pty.output.listen(_engine.feed);
+  late final StreamSubscription _ptyOut = _engine.output.listen(_pty.write);
+
+  @override
+  void dispose() {
+    _ptyIn.cancel();
+    _ptyOut.cancel();
+    _pty.kill();
+    _controller.dispose();
+    _engine.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<String>(
+        valueListenable: _engine.title,
+        builder: (_, title, __) => Scaffold(
+          appBar: AppBar(title: Text(title)),
+          body: TerminalView(_engine, controller: _controller),
+        ),
+      );
 }
 ```
 
-Initialize `RustLib` once before using the terminal. See `lib/main.dart` in this repo for a full demo app.
+See [`docs/library-api.md`](docs/library-api.md) for the full API
+walkthrough: every `TerminalEngine` / `TerminalController` / `TerminalView`
+member, shortcut customization patterns, callbacks, theming, and SSH /
+remote-PTY wiring. The reference consumer with drag-and-drop, right-click
+menu, restart overlay, and `url_launcher` integration lives at
+[`lib/example/example_app.dart`](lib/example/example_app.dart).
 
 ## Clone (with Rust FFI submodule)
 
