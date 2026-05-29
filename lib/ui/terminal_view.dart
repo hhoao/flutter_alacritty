@@ -504,13 +504,12 @@ class TerminalViewState extends State<TerminalView>
 
   void _ensureSizing(int cols, int rows) {
     if (cols == _cols && rows == _rows) return;
-    final firstLayout = _cols == 0 && _rows == 0;
     _cols = cols;
     _rows = rows;
-    if (firstLayout) return;
-    // Mirror alacritty display/mod.rs: font zoom changes cell size → new
-    // screen_lines/columns → term.resize(). Without this, scrollback offset
-    // is wrong relative to what we paint (engine still sized for pre-zoom grid).
+    // Mirror alacritty display/mod.rs: cell grid changes (first layout, font
+    // zoom, window resize) → term.resize(). First layout must notify the host
+    // too — otherwise PTY stays at whatever size the host guessed before the
+    // view mounted (e.g. 80×24) while the painter uses a taller grid.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _engine.resize(columns: cols, rows: rows);
