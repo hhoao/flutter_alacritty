@@ -7,6 +7,16 @@ import 'cell_flags.dart';
 import 'glyph_cache.dart';
 import 'mirror_grid.dart';
 
+/// Cursor ink color: the program-set OSC 12 color when present, else an
+/// inverse-video cursor using the cell's effective fg. [cursorColor] is the
+/// raw snapshot value (0x00RRGGBB) or [kCursorColorUnset].
+Color cursorInk(int cursorColor, int inverseFg) {
+  if (cursorColor == kCursorColorUnset) {
+    return Color(0xFF000000 | inverseFg);
+  }
+  return Color(0xFF000000 | (cursorColor & 0xFFFFFF));
+}
+
 /// Packed-RGB fg/bg after applying inverse (swap) and dim (darken fg).
 ({int fg, int bg}) effectiveColors(int flags, int rawFg, int rawBg) {
   var fg = rawFg, bg = rawBg;
@@ -208,7 +218,7 @@ class TerminalPainter extends CustomPainter {
       final ec = inBounds
           ? effectiveColors(flags, grid.fgAt(cr, cc), grid.bgAt(cr, cc))
           : (fg: 0xD8D8D8, bg: 0x181818);
-      final inkColor = Color(0xFF000000 | ec.fg);
+      final inkColor = cursorInk(grid.cursorColor, ec.fg);
       final shape = grid.cursorShape;
       if (shape == 0) {
         // Block: fill with ink, redraw the cell content in the bg color on top.

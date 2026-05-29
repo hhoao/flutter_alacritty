@@ -160,4 +160,23 @@ void main() {
     expect(g.columns, 80);
     expect(g.codepointAt(0, 0), 'x'.codeUnitAt(0));
   });
+
+  test('apply carries chrome colors; grown cells use live default bg', () {
+    final grid = MirrorGrid();
+    grid.apply(GridUpdate(
+      full: true,
+      rows: 1,
+      columns: 2,
+      cursorRow: 0,
+      cursorCol: 0,
+      cursorVisible: true,
+      defaultFg: 0x00FF00,
+      defaultBg: 0xFF0000,
+      cursorColor: 0x0000FF,
+      lines: const [],
+    ));
+    // Empty/untouched cells (no line deltas) fill from the live default bg.
+    expect(grid.bgAt(0, 0), 0xFF0000);
+    expect(grid.cursorColor, 0x0000FF);
+  });
 }

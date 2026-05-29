@@ -169,6 +169,9 @@ class FrbEngineBinding implements EngineBinding {
         cursorBlinking: u.cursorBlinking,
         modeFlags: u.modeFlags,
         displayOffset: u.displayOffset,
+        defaultFg: u.defaultFg,
+        defaultBg: u.defaultBg,
+        cursorColor: u.cursorColor,
         lines: u.lines.map(_lineCells).toList(),
       );
 

@@ -1042,8 +1042,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RenderUpdate dco_decode_render_update(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
     return RenderUpdate(
       lines: dco_decode_list_line_update(arr[0]),
       full: dco_decode_bool(arr[1]),
@@ -1054,6 +1054,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       cursorBlinking: dco_decode_bool(arr[6]),
       modeFlags: dco_decode_u_32(arr[7]),
       displayOffset: dco_decode_u_32(arr[8]),
+      defaultFg: dco_decode_u_32(arr[9]),
+      defaultBg: dco_decode_u_32(arr[10]),
+      cursorColor: dco_decode_u_32(arr[11]),
     );
   }
 
@@ -1299,6 +1302,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_cursorBlinking = sse_decode_bool(deserializer);
     var var_modeFlags = sse_decode_u_32(deserializer);
     var var_displayOffset = sse_decode_u_32(deserializer);
+    var var_defaultFg = sse_decode_u_32(deserializer);
+    var var_defaultBg = sse_decode_u_32(deserializer);
+    var var_cursorColor = sse_decode_u_32(deserializer);
     return RenderUpdate(
       lines: var_lines,
       full: var_full,
@@ -1309,6 +1315,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       cursorBlinking: var_cursorBlinking,
       modeFlags: var_modeFlags,
       displayOffset: var_displayOffset,
+      defaultFg: var_defaultFg,
+      defaultBg: var_defaultBg,
+      cursorColor: var_cursorColor,
     );
   }
 
@@ -1554,6 +1563,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.cursorBlinking, serializer);
     sse_encode_u_32(self.modeFlags, serializer);
     sse_encode_u_32(self.displayOffset, serializer);
+    sse_encode_u_32(self.defaultFg, serializer);
+    sse_encode_u_32(self.defaultBg, serializer);
+    sse_encode_u_32(self.cursorColor, serializer);
   }
 
   @protected

@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
+/// Sentinel `cursorColor` meaning "no OSC 12 set" (matches Rust CURSOR_COLOR_UNSET).
+const int kCursorColorUnset = 0xFF000000;
+
 /// One line's cells (native types — decoupled from FRB so MirrorGrid is
 /// unit-testable without the native lib).
 class LineCells {
@@ -36,6 +39,9 @@ class GridUpdate {
     this.cursorBlinking = false,
     this.modeFlags = 0,
     this.displayOffset = 0,
+    this.defaultFg = 0xD8D8D8,
+    this.defaultBg = 0x181818,
+    this.cursorColor = 0xFF000000,
   });
   final bool full;
   final int rows;
@@ -48,6 +54,9 @@ class GridUpdate {
   final bool cursorBlinking;
   final int modeFlags;
   final int displayOffset;
+  final int defaultFg;
+  final int defaultBg;
+  final int cursorColor;
 }
 
 /// Read-only view of the terminal grid that the engine exposes to consumers.
@@ -69,6 +78,9 @@ abstract class TerminalGridView implements Listenable {
   bool get cursorBlinking;
   int get modeFlags;
   int get displayOffset;
+  /// Program-set cursor color (OSC 12), or 0xFF000000 ([kCursorColorUnset]) when
+  /// unset — in which case painters keep their inverse-video cursor.
+  int get cursorColor;
 
   /// Bumped on every grid mutation. Painters use this to short-circuit
   /// `shouldRepaint`.
@@ -92,8 +104,9 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
       : _defaultFg = defaultFg,
         _defaultBg = defaultBg;
 
-  final int _defaultFg;
-  final int _defaultBg;
+  int _defaultFg;
+  int _defaultBg;
+  int _cursorColor = kCursorColorUnset;
   int _generation = 0;
   int _rows = 0;
   int _columns = 0;
@@ -132,6 +145,8 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
   int get modeFlags => _modeFlags;
   @override
   int get displayOffset => _displayOffset;
+  @override
+  int get cursorColor => _cursorColor;
 
   @override
   int codepointAt(int row, int col) => _codepoints[row][col];
@@ -166,6 +181,9 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
   }
 
   void apply(GridUpdate u) {
+    _defaultFg = u.defaultFg;
+    _defaultBg = u.defaultBg;
+    _cursorColor = u.cursorColor;
     // Partial damage only names changed lines; rows/columns on GridUpdate are not
     // viewport size (see FrbEngineBinding._toGridUpdate). Resize on full only.
     if (u.full) {
