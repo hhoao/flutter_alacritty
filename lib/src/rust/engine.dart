@@ -51,11 +51,28 @@ class CellData {
 class EngineConfig {
   final Uint32List palette;
   final int scrollback;
+  final int osc52;
+  final String semanticEscapeChars;
+  final int defaultCursorShape;
+  final bool defaultCursorBlinking;
 
-  const EngineConfig({required this.palette, required this.scrollback});
+  const EngineConfig({
+    required this.palette,
+    required this.scrollback,
+    required this.osc52,
+    required this.semanticEscapeChars,
+    required this.defaultCursorShape,
+    required this.defaultCursorBlinking,
+  });
 
   @override
-  int get hashCode => palette.hashCode ^ scrollback.hashCode;
+  int get hashCode =>
+      palette.hashCode ^
+      scrollback.hashCode ^
+      osc52.hashCode ^
+      semanticEscapeChars.hashCode ^
+      defaultCursorShape.hashCode ^
+      defaultCursorBlinking.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -63,7 +80,11 @@ class EngineConfig {
       other is EngineConfig &&
           runtimeType == other.runtimeType &&
           palette == other.palette &&
-          scrollback == other.scrollback;
+          scrollback == other.scrollback &&
+          osc52 == other.osc52 &&
+          semanticEscapeChars == other.semanticEscapeChars &&
+          defaultCursorShape == other.defaultCursorShape &&
+          defaultCursorBlinking == other.defaultCursorBlinking;
 }
 
 class LineUpdate {

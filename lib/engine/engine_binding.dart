@@ -23,6 +23,10 @@ abstract class EngineBinding {
   GridUpdate fullSnapshotSearched();
   Future<void> scrollLines(int delta);
   Future<void> scrollToBottom();
+  void clearHistory();
+  void reconfigure(EngineConfig config);
+  void respondClipboardLoad(String text);
+  void setCellPixels(int width, int height);
   void selectionStart(int displayRow, int col, bool rightHalf, int kind);
   void selectionUpdate(int displayRow, int col, bool rightHalf);
   void selectionClear();
@@ -44,6 +48,7 @@ abstract class RewireableEngineBinding implements EngineBinding {
   set onTitle(void Function(String)? cb);
   set onBell(void Function()? cb);
   set onClipboard(void Function(String)? cb);
+  set onClipboardLoad(void Function()? cb);
 }
 
 /// FRB-backed binding. Owns the engine handle, translates FRB [RenderUpdate]
@@ -56,6 +61,7 @@ class FrbEngineBinding implements EngineBinding {
     required this.onTitle,
     required this.onBell,
     required this.onClipboard,
+    required this.onClipboardLoad,
     required EngineConfig engineConfig,
   }) : _engine = engineNew(columns: columns, rows: rows, config: engineConfig);
 
@@ -64,6 +70,7 @@ class FrbEngineBinding implements EngineBinding {
   final void Function(String) onTitle;
   final void Function() onBell;
   final void Function(String) onClipboard;
+  final void Function() onClipboardLoad;
 
   @override
   Future<void> advance(Uint8List bytes) => engineAdvance(engine: _engine, bytes: bytes);
@@ -89,9 +96,19 @@ class FrbEngineBinding implements EngineBinding {
         onBell();
       } else if (e is EngineEvent_ClipboardStore) {
         onClipboard(e.field0);
+      } else if (e is EngineEvent_ClipboardLoad) {
+        onClipboardLoad();
       }
     }
   }
+
+  @override
+  void respondClipboardLoad(String text) =>
+      engineRespondClipboardLoad(engine: _engine, text: text);
+
+  @override
+  void setCellPixels(int width, int height) =>
+      engineSetCellPixels(engine: _engine, width: width, height: height);
 
   @override
   GridUpdate fullSnapshot() => _toGridUpdate(engineFullSnapshot(engine: _engine));
@@ -110,6 +127,13 @@ class FrbEngineBinding implements EngineBinding {
 
   @override
   Future<void> scrollToBottom() => engineScrollToBottom(engine: _engine);
+
+  @override
+  void clearHistory() => engineClearHistory(engine: _engine);
+
+  @override
+  void reconfigure(EngineConfig config) =>
+      engineReconfigure(engine: _engine, config: config);
 
   @override
   void selectionStart(int displayRow, int col, bool rightHalf, int kind) =>

@@ -18,4 +18,5 @@ sealed class EngineEvent with _$EngineEvent {
   const factory EngineEvent.bell() = EngineEvent_Bell;
   const factory EngineEvent.clipboardStore(String field0) =
       EngineEvent_ClipboardStore;
+  const factory EngineEvent.clipboardLoad() = EngineEvent_ClipboardLoad;
 }

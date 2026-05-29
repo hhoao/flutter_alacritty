@@ -165,6 +165,94 @@ double_click_threshold = 400
     });
   });
 
+  test('parses shell section', () {
+    final c = TerminalConfig.fromTomlString('''
+[shell]
+program = "/bin/zsh"
+args = ["-l", "-i"]
+working_directory = "/tmp"
+env = { FOO = "bar" }
+''');
+    expect(c.shell.program, '/bin/zsh');
+    expect(c.shell.args, ['-l', '-i']);
+    expect(c.shell.workingDirectory, '/tmp');
+    expect(c.shell.env['FOO'], 'bar');
+  });
+
+  test('parses keyboard bindings', () {
+    final c = TerminalConfig.fromTomlString('''
+[[keyboard.bindings]]
+key = "F"
+mods = "Control|Shift"
+action = "Paste"
+
+[[keyboard.bindings]]
+key = "Left"
+mods = "Control"
+chars = "\\u001b[1;5D"
+''');
+    expect(c.keyboard.bindings.length, 2);
+    expect(c.keyboard.bindings[0].key, 'F');
+    expect(c.keyboard.bindings[0].mods, 'Control|Shift');
+    expect(c.keyboard.bindings[0].action, 'Paste');
+    expect(c.keyboard.bindings[1].chars, '\u001b[1;5D');
+  });
+
+  test('parses window, cursor.style, selection, terminal.osc52, colors.cursor', () {
+    final c = TerminalConfig.fromTomlString('''
+[window]
+padding = { x = 6, y = 4 }
+opacity = 0.9
+decorations = "none"
+
+[cursor]
+blink_interval = 600
+blink_timeout = 0
+style = { shape = "Beam", blinking = "On" }
+
+[selection]
+semantic_escape_chars = ",.;"
+
+[terminal]
+osc52 = "CopyPaste"
+
+[colors.cursor]
+text = "#101010"
+cursor = "#fefefe"
+''');
+    expect(c.window.padding.x, 6);
+    expect(c.window.opacity, 0.9);
+    expect(c.window.decorations, 'none');
+    expect(c.cursor.blinkInterval, 600);
+    expect(c.cursor.blinkTimeout, 0);
+    expect(c.cursor.defaultShape, 2); // Beam
+    expect(c.cursor.defaultBlinking, true);
+    expect(c.selection.semanticEscapeChars, ',.;');
+    expect(c.terminal.osc52, Osc52Mode.copyPaste);
+    expect(c.colors.cursorText, 0x101010);
+    expect(c.colors.cursorBody, 0xFEFEFE);
+  });
+
+  test('theme exposes cursor text/body colors', () {
+    final c = TerminalConfig.fromTomlString('''
+[colors.cursor]
+text = "#101010"
+cursor = "#fefefe"
+''');
+    expect(c.theme.cursorText, 0x101010);
+    expect(c.theme.cursorColor, 0xFEFEFE);
+  });
+
+  test('missing/malformed sections keep defaults', () {
+    final c = TerminalConfig.fromTomlString('[font]\nsize = "oops"\n');
+    final d = TerminalConfig.defaults();
+    expect(c.shell.program, isNull);
+    expect(c.keyboard.bindings, isEmpty);
+    expect(c.terminal.osc52, Osc52Mode.onlyCopy);
+    expect(c.font.size, d.font.size); // malformed string ignored
+    expect(c.cursor.defaultShape, 0);
+  });
+
   group('ime config', () {
     test('defaults match the spec (preedit_bg #282828, fg #d8d8d8, underline true)', () {
       final c = TerminalConfig.defaults().ime;

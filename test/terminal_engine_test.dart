@@ -189,6 +189,7 @@ void main() {
         required void Function(String) onTitle,
         required void Function() onBell,
         required void Function(String) onClipboard,
+        required void Function() onClipboardLoad,
         required engineConfig,
       }) {
         factoryCalls++;

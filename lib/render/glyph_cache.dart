@@ -9,12 +9,18 @@ class GlyphCache {
     required this.fontSize,
     required this.cellWidth,
     this.fontFamilyFallback = const [],
+    this.boldFamily,
+    this.italicFamily,
+    this.boldItalicFamily,
     this.lineHeight = 1.0,
     this.maxEntries = 4096,
     this.maxBuildsPerFrame = 128,
   });
 
   final String fontFamily;
+  final String? boldFamily;
+  final String? italicFamily;
+  final String? boldItalicFamily;
   final List<String> fontFamilyFallback;
   final double fontSize;
   final double cellWidth;
@@ -43,6 +49,13 @@ class GlyphCache {
 
   void beginFrame() => _buildsThisFrame = 0;
 
+  String familyForStyle({required bool bold, required bool italic}) {
+    if (bold && italic) return boldItalicFamily ?? fontFamily;
+    if (bold) return boldFamily ?? fontFamily;
+    if (italic) return italicFamily ?? fontFamily;
+    return fontFamily;
+  }
+
   /// Returns a cached paragraph, or builds one if under the per-frame budget.
   /// Returns null when the budget is exhausted (the painter schedules a warmup
   /// frame and the glyph fills in next frame).
@@ -70,12 +83,18 @@ class GlyphCache {
 
   ui.Paragraph _build(int codepoint, int fg,
       {bool bold = false, bool italic = false, bool wide = false}) {
+    final family = familyForStyle(bold: bold, italic: italic);
+    final hasDedicatedFamily = (bold && italic && boldItalicFamily != null) ||
+        (bold && !italic && boldFamily != null) ||
+        (!bold && italic && italicFamily != null);
+    final synthesizeBold = bold && !hasDedicatedFamily;
+    final synthesizeItalic = italic && !hasDedicatedFamily;
     final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-      fontFamily: fontFamily,
+      fontFamily: family,
       fontSize: fontSize,
       height: lineHeight,
       strutStyle: ui.StrutStyle(
-        fontFamily: fontFamily,
+        fontFamily: family,
         fontSize: fontSize,
         height: lineHeight,
         forceStrutHeight: true,
@@ -83,11 +102,13 @@ class GlyphCache {
     ))
       ..pushStyle(ui.TextStyle(
         color: ui.Color(0xFF000000 | (fg & 0xFFFFFF)),
-        fontFamily: fontFamily,
+        fontFamily: family,
         fontFamilyFallback: fontFamilyFallback,
         fontSize: fontSize,
-        fontWeight: bold ? ui.FontWeight.bold : ui.FontWeight.normal,
-        fontStyle: italic ? ui.FontStyle.italic : ui.FontStyle.normal,
+        fontWeight:
+            synthesizeBold ? ui.FontWeight.bold : ui.FontWeight.normal,
+        fontStyle:
+            synthesizeItalic ? ui.FontStyle.italic : ui.FontStyle.normal,
       ))
       ..addText(String.fromCharCode(codepoint));
     final width = wide ? cellWidth * 2 : cellWidth;

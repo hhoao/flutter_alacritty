@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_alacritty/engine/engine_binding.dart';
 import 'package:flutter_alacritty/engine/terminal_engine_client.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
+import 'package:flutter_alacritty/src/rust/engine.dart';
 
 class _SearchFake implements EngineBinding {
   String? lastSet;
@@ -54,6 +55,14 @@ class _SearchFake implements EngineBinding {
   Future<void> scrollLines(int d) async {}
   @override
   Future<void> scrollToBottom() async {}
+  @override
+  void clearHistory() {}
+  @override
+  void reconfigure(EngineConfig config) {}
+  @override
+  void respondClipboardLoad(String text) {}
+  @override
+  void setCellPixels(int width, int height) {}
   @override
   void selectionStart(int r, int c, bool rh, int k) {}
   @override
@@ -110,6 +119,14 @@ class _FakeBinding implements EngineBinding {
   Future<void> scrollLines(int delta) async {}
   @override
   Future<void> scrollToBottom() async {}
+  @override
+  void clearHistory() {}
+  @override
+  void reconfigure(EngineConfig config) {}
+  @override
+  void respondClipboardLoad(String text) {}
+  @override
+  void setCellPixels(int width, int height) {}
   @override
   void selectionStart(int displayRow, int col, bool rightHalf, int kind) {}
   @override

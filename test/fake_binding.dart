@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_alacritty/engine/engine_binding.dart';
 import 'package:flutter_alacritty/render/cell_flags.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
+import 'package:flutter_alacritty/src/rust/engine.dart';
 
 /// Shared fake [EngineBinding] used by widget/integration-style tests that
 /// drive `ExampleTerminalApp` / `TerminalEngine` without the native engine.
@@ -96,6 +97,20 @@ class FakeBinding implements RewireableEngineBinding {
   void Function(String)? onTitle;
   void Function()? onBell;
   void Function(String)? onClipboard;
+  void Function()? onClipboardLoad;
+
+  String? lastClipboardLoadText;
+  int? lastCellWidth;
+  int? lastCellHeight;
+
+  @override
+  void respondClipboardLoad(String text) => lastClipboardLoadText = text;
+
+  @override
+  void setCellPixels(int width, int height) {
+    lastCellWidth = width;
+    lastCellHeight = height;
+  }
 
   @override
   Future<void> advance(Uint8List bytes) async {}
@@ -122,6 +137,8 @@ class FakeBinding implements RewireableEngineBinding {
           onBell?.call();
         case 'clipboard':
           onClipboard?.call(payload as String);
+        case 'clipboard_load':
+          onClipboardLoad?.call();
         default:
           throw StateError(
               'FakeBinding.pumpEvents: unknown event kind: $kind');
@@ -143,6 +160,15 @@ class FakeBinding implements RewireableEngineBinding {
   @override
   Future<void> scrollToBottom() async {
     scrollToBottomCalls++;
+  }
+  @override
+  void clearHistory() {}
+  int reconfigureCalls = 0;
+  EngineConfig? lastReconfigure;
+  @override
+  void reconfigure(EngineConfig config) {
+    reconfigureCalls++;
+    lastReconfigure = config;
   }
   @override
   void selectionStart(int displayRow, int col, bool rightHalf, int kind) {

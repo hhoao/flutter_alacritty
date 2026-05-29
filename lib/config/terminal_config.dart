@@ -34,6 +34,8 @@ class TerminalColors {
     required this.searchFocusedFg,
     required this.hintStartFg,
     required this.hintStartBg,
+    this.cursorText,
+    this.cursorBody,
   });
 
   final int background;
@@ -46,6 +48,8 @@ class TerminalColors {
   final int searchFocusedFg;
   final int hintStartFg;
   final int hintStartBg;
+  final int? cursorText;
+  final int? cursorBody;
 
   TerminalColors copyWith({
     int? background,
@@ -58,6 +62,8 @@ class TerminalColors {
     int? searchFocusedFg,
     int? hintStartFg,
     int? hintStartBg,
+    int? cursorText,
+    int? cursorBody,
   }) =>
       TerminalColors(
         background: background ?? this.background,
@@ -70,7 +76,16 @@ class TerminalColors {
         searchFocusedFg: searchFocusedFg ?? this.searchFocusedFg,
         hintStartFg: hintStartFg ?? this.hintStartFg,
         hintStartBg: hintStartBg ?? this.hintStartBg,
+        cursorText: cursorText ?? this.cursorText,
+        cursorBody: cursorBody ?? this.cursorBody,
       );
+}
+
+/// Per-style font override. null family → synthesize from the base family.
+class FontStyleConfig {
+  const FontStyleConfig({this.family, this.style});
+  final String? family;
+  final String? style; // accepted for forward-compat; family drives selection
 }
 
 class FontConfig {
@@ -79,32 +94,83 @@ class FontConfig {
     required this.fallback,
     required this.size,
     required this.lineHeight,
+    this.bold,
+    this.italic,
+    this.boldItalic,
+    this.offsetX = 0,
+    this.offsetY = 0,
+    this.glyphOffsetX = 0,
+    this.glyphOffsetY = 0,
   });
 
   final String family;
   final List<String> fallback;
   final double size;
   final double lineHeight;
+  final FontStyleConfig? bold;
+  final FontStyleConfig? italic;
+  final FontStyleConfig? boldItalic;
+
+  // NOTE: offset/glyphOffset are parsed for alacritty config compatibility but
+  // not yet applied to cell metrics / glyph painting. Accepted-but-inert (like
+  // window.opacity/decorations) so configs don't error; wiring is deferred —
+  // see docs/superpowers/plans/2026-05-29-plan2o-2nb-findings.md.
+  final double offsetX;
+  final double offsetY;
+  final double glyphOffsetX;
+  final double glyphOffsetY;
 
   FontConfig copyWith({
     String? family,
     List<String>? fallback,
     double? size,
     double? lineHeight,
+    FontStyleConfig? bold,
+    FontStyleConfig? italic,
+    FontStyleConfig? boldItalic,
+    double? offsetX,
+    double? offsetY,
+    double? glyphOffsetX,
+    double? glyphOffsetY,
   }) =>
       FontConfig(
         family: family ?? this.family,
         fallback: fallback ?? this.fallback,
         size: size ?? this.size,
         lineHeight: lineHeight ?? this.lineHeight,
+        bold: bold ?? this.bold,
+        italic: italic ?? this.italic,
+        boldItalic: boldItalic ?? this.boldItalic,
+        offsetX: offsetX ?? this.offsetX,
+        offsetY: offsetY ?? this.offsetY,
+        glyphOffsetX: glyphOffsetX ?? this.glyphOffsetX,
+        glyphOffsetY: glyphOffsetY ?? this.glyphOffsetY,
       );
 }
 
 class CursorConfig {
-  const CursorConfig({required this.blinkInterval});
+  const CursorConfig({
+    required this.blinkInterval,
+    this.defaultShape = 0, // 0 Block 1 Underline 2 Beam 3 HollowBlock 4 Hidden
+    this.defaultBlinking = false,
+    this.blinkTimeout = 5, // seconds; 0 = never stop
+  });
   final int blinkInterval; // ms
-  CursorConfig copyWith({int? blinkInterval}) =>
-      CursorConfig(blinkInterval: blinkInterval ?? this.blinkInterval);
+  final int defaultShape;
+  final bool defaultBlinking;
+  final int blinkTimeout;
+  CursorConfig copyWith({
+    int? blinkInterval,
+    int? defaultShape,
+    bool? defaultBlinking,
+    int? blinkTimeout,
+  }) =>
+      CursorConfig(
+        blinkInterval: blinkInterval ?? this.blinkInterval,
+        defaultShape: defaultShape ?? this.defaultShape,
+        defaultBlinking: defaultBlinking ?? this.defaultBlinking,
+        blinkTimeout: blinkTimeout ?? this.blinkTimeout,
+      );
 }
 
 class ScrollConfig {
@@ -161,6 +227,121 @@ class ImeConfig {
       );
 }
 
+/// Shell spawn configuration. program=null → $SHELL fallback (current behavior).
+class ShellConfig {
+  const ShellConfig({
+    this.program,
+    this.args = const [],
+    this.workingDirectory,
+    this.env = const {},
+  });
+  final String? program;
+  final List<String> args;
+  final String? workingDirectory;
+  final Map<String, String> env;
+
+  ShellConfig copyWith({
+    String? program,
+    List<String>? args,
+    String? workingDirectory,
+    Map<String, String>? env,
+  }) =>
+      ShellConfig(
+        program: program ?? this.program,
+        args: args ?? this.args,
+        workingDirectory: workingDirectory ?? this.workingDirectory,
+        env: env ?? this.env,
+      );
+}
+
+/// One raw `[[keyboard.bindings]]` entry. Parsing to Flutter Shortcuts/Actions
+/// happens in `lib/input/key_bindings.dart` so this stays a pure data holder.
+class RawKeyBinding {
+  const RawKeyBinding({
+    required this.key,
+    this.mods = '',
+    this.mode = '',
+    this.action,
+    this.chars,
+  });
+  final String key;
+  final String mods;
+  final String mode;
+  final String? action;
+  final String? chars;
+}
+
+class KeyboardConfig {
+  const KeyboardConfig({this.bindings = const []});
+  final List<RawKeyBinding> bindings;
+  KeyboardConfig copyWith({List<RawKeyBinding>? bindings}) =>
+      KeyboardConfig(bindings: bindings ?? this.bindings);
+}
+
+class WindowPadding {
+  const WindowPadding(this.x, this.y);
+  final double x;
+  final double y;
+}
+
+class WindowConfig {
+  const WindowConfig({
+    this.padding = const WindowPadding(0, 0),
+    this.opacity = 1.0,
+    this.decorations = 'full',
+  });
+  final WindowPadding padding;
+  final double opacity; // host-applied (config-only for the widget)
+  final String decorations; // host-applied: full|none|transparent|buttonless
+  WindowConfig copyWith({WindowPadding? padding, double? opacity, String? decorations}) =>
+      WindowConfig(
+        padding: padding ?? this.padding,
+        opacity: opacity ?? this.opacity,
+        decorations: decorations ?? this.decorations,
+      );
+}
+
+class SelectionConfig {
+  const SelectionConfig({required this.semanticEscapeChars});
+  final String semanticEscapeChars;
+  SelectionConfig copyWith({String? semanticEscapeChars}) =>
+      SelectionConfig(semanticEscapeChars: semanticEscapeChars ?? this.semanticEscapeChars);
+}
+
+/// OSC 52 policy mirror of alacritty `term::Osc52` (lowercase TOML names).
+enum Osc52Mode { disabled, onlyCopy, onlyPaste, copyPaste }
+
+int osc52ToWire(Osc52Mode m) => switch (m) {
+      Osc52Mode.disabled => 0,
+      Osc52Mode.onlyCopy => 1,
+      Osc52Mode.onlyPaste => 2,
+      Osc52Mode.copyPaste => 3,
+    };
+
+Osc52Mode osc52FromString(String s, Osc52Mode fallback) => switch (s.toLowerCase()) {
+      'disabled' => Osc52Mode.disabled,
+      'onlycopy' => Osc52Mode.onlyCopy,
+      'onlypaste' => Osc52Mode.onlyPaste,
+      'copypaste' => Osc52Mode.copyPaste,
+      _ => fallback,
+    };
+
+class TerminalBehaviorConfig {
+  const TerminalBehaviorConfig({this.osc52 = Osc52Mode.onlyCopy});
+  final Osc52Mode osc52;
+  TerminalBehaviorConfig copyWith({Osc52Mode? osc52}) =>
+      TerminalBehaviorConfig(osc52: osc52 ?? this.osc52);
+}
+
+int _cursorShapeFromName(String s, int fallback) => switch (s.toLowerCase()) {
+      'block' => 0,
+      'underline' => 1,
+      'beam' => 2,
+      'hollowblock' => 3,
+      'hidden' => 4,
+      _ => fallback,
+    };
+
 /// Immutable, programmatic terminal configuration. Build with [TerminalConfig.defaults]
 /// + [copyWith], or parse from TOML via [fromTomlString]. No file IO here — that lives
 /// in ConfigLoader, so a library host can use this directly with no file.
@@ -173,6 +354,11 @@ class TerminalConfig {
     required this.mouse,
     required this.bell,
     required this.ime,
+    required this.shell,
+    required this.keyboard,
+    required this.window,
+    required this.selection,
+    required this.terminal,
   });
 
   final TerminalColors colors;
@@ -182,6 +368,11 @@ class TerminalConfig {
   final MouseConfig mouse;
   final BellConfig bell;
   final ImeConfig ime;
+  final ShellConfig shell;
+  final KeyboardConfig keyboard;
+  final WindowConfig window;
+  final SelectionConfig selection;
+  final TerminalBehaviorConfig terminal;
 
   /// The v1 look-and-feel, verbatim.
   factory TerminalConfig.defaults() => const TerminalConfig(
@@ -199,6 +390,8 @@ class TerminalConfig {
           searchFocusedFg: 0x181818,
           hintStartFg: 0x181818,
           hintStartBg: 0xF4BF75,
+          cursorText: null,
+          cursorBody: null,
         ),
         font: FontConfig(
           family: 'DejaVu Sans Mono',
@@ -211,6 +404,13 @@ class TerminalConfig {
         mouse: MouseConfig(doubleClickThreshold: 300),
         bell: BellConfig(color: 0xFFFFFF, duration: 0, animation: 'linear'),
         ime: ImeConfig(preeditBg: 0x282828, preeditFg: 0xD8D8D8, underline: true),
+        shell: ShellConfig(),
+        keyboard: KeyboardConfig(),
+        window: WindowConfig(),
+        selection: SelectionConfig(
+          semanticEscapeChars: ',│`|:"\' ()[]{}<>\t',
+        ),
+        terminal: TerminalBehaviorConfig(),
       );
 
   TerminalConfig copyWith({
@@ -221,6 +421,11 @@ class TerminalConfig {
     MouseConfig? mouse,
     BellConfig? bell,
     ImeConfig? ime,
+    ShellConfig? shell,
+    KeyboardConfig? keyboard,
+    WindowConfig? window,
+    SelectionConfig? selection,
+    TerminalBehaviorConfig? terminal,
   }) =>
       TerminalConfig(
         colors: colors ?? this.colors,
@@ -230,6 +435,11 @@ class TerminalConfig {
         mouse: mouse ?? this.mouse,
         bell: bell ?? this.bell,
         ime: ime ?? this.ime,
+        shell: shell ?? this.shell,
+        keyboard: keyboard ?? this.keyboard,
+        window: window ?? this.window,
+        selection: selection ?? this.selection,
+        terminal: terminal ?? this.terminal,
       );
 
   /// TextStyle the renderer measures cells from and feeds the glyph cache.
@@ -261,8 +471,8 @@ class TerminalConfig {
         searchFocused:
             (bg: colors.searchFocusedBg, fg: colors.searchFocusedFg),
         hintStart: (bg: colors.hintStartBg, fg: colors.hintStartFg),
-        cursorText: null,
-        cursorColor: null,
+        cursorText: colors.cursorText,
+        cursorColor: colors.cursorBody,
         bellOverlay: bell.color,
       );
 
@@ -272,6 +482,9 @@ class TerminalConfig {
         fallback: font.fallback,
         size: font.size,
         lineHeight: font.lineHeight,
+        boldFamily: font.bold?.family,
+        italicFamily: font.italic?.family,
+        boldItalicFamily: font.boldItalic?.family,
       );
 
   /// Palette + scrollback handed to the Rust engine. palette is length 18:
@@ -280,6 +493,10 @@ class TerminalConfig {
         palette: Uint32List.fromList(
             [...colors.ansi, colors.foreground, colors.background]),
         scrollback: scrolling.history,
+        osc52: osc52ToWire(terminal.osc52),
+        semanticEscapeChars: selection.semanticEscapeChars,
+        defaultCursorShape: cursor.defaultShape,
+        defaultCursorBlinking: cursor.defaultBlinking,
       );
 
   /// Parse an alacritty-style TOML document. Unknown keys are ignored; any
@@ -352,6 +569,65 @@ class TerminalConfig {
     final mouseM = section(map, 'mouse');
     final bellM = section(map, 'bell');
     final imeM = section(map, 'ime');
+    final shellM = section(map, 'shell');
+    final windowM = section(map, 'window');
+    final paddingM = section(windowM, 'padding');
+    final selectionM2 = section(map, 'selection');
+    final terminalM = section(map, 'terminal');
+    final cursorStyleM = section(cursorM, 'style');
+    final colorsCursorM = section(colorsM, 'cursor');
+
+    List<String> strList(Map m, String key) {
+      final v = m[key];
+      if (v is List) return v.map((e) => '$e').toList();
+      return const [];
+    }
+
+    Map<String, String> strMap(Map m, String key) {
+      final v = m[key];
+      if (v is Map) {
+        return v.map((k, val) => MapEntry('$k', '$val'));
+      }
+      return const {};
+    }
+
+    String? strOrNull(Map m, String key) {
+      final v = m[key];
+      return v is String ? v : null;
+    }
+
+    int? colorOrNull(Map m, String key) {
+      final v = m[key];
+      if (v is String) return parseColor(v);
+      return null;
+    }
+
+    FontStyleConfig? fontStyleFrom(Map m, String key) {
+      final v = m[key];
+      if (v is! Map) return null;
+      return FontStyleConfig(
+        family: strOrNull(v, 'family'),
+        style: strOrNull(v, 'style'),
+      );
+    }
+
+    final rawBindings = <RawKeyBinding>[];
+    final kb = map['keyboard'];
+    final rawList = (kb is Map && kb['bindings'] is List)
+        ? kb['bindings'] as List
+        : const [];
+    for (final e in rawList) {
+      if (e is! Map) continue;
+      final keyName = e['key'];
+      if (keyName is! String) continue;
+      rawBindings.add(RawKeyBinding(
+        key: keyName,
+        mods: e['mods'] is String ? e['mods'] as String : '',
+        mode: e['mode'] is String ? e['mode'] as String : '',
+        action: e['action'] is String ? e['action'] as String : null,
+        chars: e['chars'] is String ? e['chars'] as String : null,
+      ));
+    }
 
     return TerminalConfig(
       colors: TerminalColors(
@@ -365,15 +641,24 @@ class TerminalConfig {
         searchFocusedFg: color(focusedM, 'foreground', d.colors.searchFocusedFg),
         hintStartFg: color(hintStartM, 'foreground', d.colors.hintStartFg),
         hintStartBg: color(hintStartM, 'background', d.colors.hintStartBg),
+        cursorText: colorOrNull(colorsCursorM, 'text') ?? d.colors.cursorText,
+        cursorBody: colorOrNull(colorsCursorM, 'cursor') ?? d.colors.cursorBody,
       ),
       font: FontConfig(
         family: str(fontM, 'family', d.font.family),
         fallback: fallbackList(),
         size: dbl(fontM, 'size', d.font.size),
         lineHeight: dbl(fontM, 'line_height', d.font.lineHeight),
+        bold: fontStyleFrom(fontM, 'bold') ?? d.font.bold,
+        italic: fontStyleFrom(fontM, 'italic') ?? d.font.italic,
+        boldItalic: fontStyleFrom(fontM, 'bold_italic') ?? d.font.boldItalic,
       ),
       cursor: CursorConfig(
         blinkInterval: integer(cursorM, 'blink_interval', d.cursor.blinkInterval),
+        defaultShape: _cursorShapeFromName(str(cursorStyleM, 'shape', ''), d.cursor.defaultShape),
+        defaultBlinking:
+            str(cursorStyleM, 'blinking', '').toLowerCase() == 'on' ? true : d.cursor.defaultBlinking,
+        blinkTimeout: integer(cursorM, 'blink_timeout', d.cursor.blinkTimeout),
       ),
       scrolling: ScrollConfig(
         history: integer(scrollM, 'history', d.scrolling.history),
@@ -392,6 +677,28 @@ class TerminalConfig {
         preeditBg: color(imeM, 'preedit_bg', d.ime.preeditBg),
         preeditFg: color(imeM, 'preedit_fg', d.ime.preeditFg),
         underline: boolean(imeM, 'underline', d.ime.underline),
+      ),
+      shell: ShellConfig(
+        program: strOrNull(shellM, 'program'),
+        args: strList(shellM, 'args'),
+        workingDirectory: strOrNull(shellM, 'working_directory'),
+        env: strMap(shellM, 'env'),
+      ),
+      keyboard: KeyboardConfig(bindings: rawBindings),
+      window: WindowConfig(
+        padding: WindowPadding(
+          dbl(paddingM, 'x', d.window.padding.x),
+          dbl(paddingM, 'y', d.window.padding.y),
+        ),
+        opacity: dbl(windowM, 'opacity', d.window.opacity),
+        decorations: str(windowM, 'decorations', d.window.decorations),
+      ),
+      selection: SelectionConfig(
+        semanticEscapeChars:
+            str(selectionM2, 'semantic_escape_chars', d.selection.semanticEscapeChars),
+      ),
+      terminal: TerminalBehaviorConfig(
+        osc52: osc52FromString(str(terminalM, 'osc52', ''), d.terminal.osc52),
       ),
     );
   }

@@ -7,12 +7,16 @@ import 'package:flutter_alacritty/src/rust/frb_generated.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
-  runApp(MyApp(config: ConfigLoader.load()));
+  final path = ConfigLoader.resolveConfigPath();
+  final initial = ConfigLoader.loadFile(path);
+  final updates = path != null ? ConfigLoader.watch(path) : null;
+  runApp(MyApp(config: initial, configUpdates: updates));
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({required this.config, super.key});
+  const MyApp({required this.config, this.configUpdates, super.key});
   final TerminalConfig config;
+  final Stream<TerminalConfig>? configUpdates;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -40,7 +44,11 @@ class _MyAppState extends State<MyApp> {
         title: title,
         home: child,
       ),
-      child: ExampleTerminalApp(title: _title, config: widget.config),
+      child: ExampleTerminalApp(
+        title: _title,
+        config: widget.config,
+        configUpdates: widget.configUpdates,
+      ),
     );
   }
 }

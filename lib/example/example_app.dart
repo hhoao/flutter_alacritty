@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart' as launcher;
 import '../config/terminal_config.dart';
 import '../controller/terminal_controller.dart';
 import '../engine/terminal_engine.dart';
+import '../input/key_bindings.dart';
 import '../input/paste.dart';
 import '../pty/flutter_pty_backend.dart';
 import '../pty/pty_backend.dart';
@@ -68,6 +69,7 @@ class ExampleTerminalApp extends StatefulWidget {
     this.ptyFactory,
     this.engineFactory,
     this.config,
+    this.configUpdates,
     this.launchUrl,
     super.key,
   });
@@ -79,6 +81,7 @@ class ExampleTerminalApp extends StatefulWidget {
   final PtyFactory? ptyFactory;
   final EngineFactory? engineFactory;
   final TerminalConfig? config;
+  final Stream<TerminalConfig>? configUpdates;
   final UrlLauncher? launchUrl;
 
   @override
@@ -91,13 +94,15 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   late final bool _ownsTitle = widget.title == null;
   late final UrlLauncher _launch = widget.launchUrl ??
       (u) async => launcher.launchUrl(Uri.parse(u));
-  late final TerminalConfig _config = widget.config ?? TerminalConfig.defaults();
+  late TerminalConfig _config = widget.config ?? TerminalConfig.defaults();
+  late (Map<ShortcutActivator, Intent>, Map<Type, Action<Intent>>) _binds =
+      bindingsToShortcuts(_config.keyboard.bindings);
   // Cell metrics drive the cols/rows the engine is spawned/resized into. We
   // compute them once here from the textStyle so layoutBuilder→_ensureStarted
   // and the nested TerminalView agree on sizing (both derive from the same
   // measured style).
-  late final CellMetrics _metrics =
-      CellMetrics.measure(_config.textStyle.copyWith(fontSize: _config.font.size));
+  late CellMetrics _metrics = _measureMetrics(_config);
+  StreamSubscription<TerminalConfig>? _cfgSub;
 
   TerminalEngine? _engine;
   TerminalController _controller = TerminalController();
@@ -109,6 +114,7 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   StreamSubscription<Uint8List>? _outputSub;
   StreamSubscription<Uint8List>? _engineOutputSub;
   StreamSubscription<String>? _clipSub;
+  StreamSubscription<void>? _clipLoadSub;
   int _cols = 0, _rows = 0;
   TermStatus _status = TermStatus.running;
   int? _exitCode;
@@ -118,9 +124,30 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   final GlobalKey<State<TerminalView>> _viewKey =
       GlobalKey<State<TerminalView>>();
 
+  CellMetrics _measureMetrics(TerminalConfig config) => CellMetrics.measure(
+      config.textStyle.copyWith(fontSize: config.font.size));
+
   @override
   void initState() {
     super.initState();
+    _cfgSub = widget.configUpdates?.listen(_applyConfig);
+  }
+
+  void _applyConfig(TerminalConfig next) {
+    final prev = _config;
+    setState(() {
+      _config = next;
+      _binds = bindingsToShortcuts(next.keyboard.bindings);
+      if (next.font.family != prev.font.family ||
+          next.font.size != prev.font.size ||
+          next.font.lineHeight != prev.font.lineHeight) {
+        _metrics = _measureMetrics(next);
+      }
+    });
+    _engine?.reconfigure(next);
+    if (next.shell.program != prev.shell.program) {
+      debugPrint('flutter_alacritty: [shell] change applies on restart');
+    }
   }
 
   /// Mirror engine.title → host-visible notifier.
@@ -150,10 +177,15 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   }
 
   void _start(int cols, int rows) {
+    if (_config.window.opacity != 1.0 ||
+        _config.window.decorations != 'full') {
+      debugPrint('flutter_alacritty: window.opacity/decorations are host-applied; '
+          'see linux/runner for native window setup (config-only here)');
+    }
     try {
       final pty = (widget.ptyFactory ??
           ({required int rows, required int columns}) =>
-              FlutterPtyBackend(rows: rows, columns: columns))(
+              FlutterPtyBackend(rows: rows, columns: columns, shell: _config.shell))(
         rows: rows,
         columns: cols,
       );
@@ -167,6 +199,10 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
       engine.title.addListener(_syncTitle);
       _clipSub = engine.clipboardStore
           .listen((t) => Clipboard.setData(ClipboardData(text: t)));
+      _clipLoadSub = engine.clipboardLoad.listen((_) async {
+        final data = await Clipboard.getData('text/plain');
+        _engine?.respondClipboardLoad(data?.text ?? '');
+      });
       _engineOutputSub = engine.output.listen(pty.write);
       engine.resize(columns: cols, rows: rows);
       engine.initializeEmpty(rows, cols);
@@ -198,6 +234,7 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     _outputSub?.cancel();
     _engineOutputSub?.cancel();
     _clipSub?.cancel();
+    _clipLoadSub?.cancel();
     _pty?.kill();
     _engine?.title.removeListener(_syncTitle);
     _controller.dispose();
@@ -206,6 +243,7 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     _outputSub = null;
     _engineOutputSub = null;
     _clipSub = null;
+    _clipLoadSub = null;
     _pty = null;
     _engine = null;
     _exitCode = null;
@@ -320,9 +358,11 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
 
   @override
   void dispose() {
+    _cfgSub?.cancel();
     _outputSub?.cancel();
     _engineOutputSub?.cancel();
     _clipSub?.cancel();
+    _clipLoadSub?.cancel();
     _pty?.kill();
     _engine?.title.removeListener(_syncTitle);
     _controller.dispose();
@@ -338,10 +378,14 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
       backgroundColor: Color(0xFF000000 | _config.colors.background),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final cols =
-              (constraints.maxWidth / _metrics.width).floor().clamp(1, 1000);
-          final rows =
-              (constraints.maxHeight / _metrics.height).floor().clamp(1, 1000);
+          final padX = _config.window.padding.x;
+          final padY = _config.window.padding.y;
+          final availW =
+              (constraints.maxWidth - 2 * padX).clamp(0.0, double.infinity);
+          final availH =
+              (constraints.maxHeight - 2 * padY).clamp(0.0, double.infinity);
+          final cols = (availW / _metrics.width).floor().clamp(1, 1000);
+          final rows = (availH / _metrics.height).floor().clamp(1, 1000);
           WidgetsBinding.instance
               .addPostFrameCallback((_) => _ensureStarted(cols, rows));
           return DropTarget(
@@ -376,10 +420,15 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                         controller: _controller,
                         theme: _config.theme,
                         textStyle: _config.style,
+                        padding: EdgeInsets.symmetric(
+                            horizontal: _config.window.padding.x,
+                            vertical: _config.window.padding.y),
                         focusNode: _focus,
                         autofocus: true,
                         cursorBlinkInterval: Duration(
                             milliseconds: _config.cursor.blinkInterval),
+                        cursorBlinkTimeout:
+                            Duration(seconds: _config.cursor.blinkTimeout),
                         bellDuration:
                             Duration(milliseconds: _config.bell.duration),
                         doubleClickThreshold: Duration(
@@ -388,6 +437,7 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                         preeditBg: _config.ime.preeditBg,
                         preeditFg: _config.ime.preeditFg,
                         preeditUnderline: _config.ime.underline,
+                        shortcuts: _binds.$1,
                         // Host-side overrides only — the view's internal
                         // default actions cover zoom, and a no-host Copy
                         // would just write the engine selection to the

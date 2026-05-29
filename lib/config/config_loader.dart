@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -39,4 +40,46 @@ class ConfigLoader {
 
   /// Resolve the default path and load it (used by main()).
   static TerminalConfig load() => loadFile(resolveConfigPath());
+
+  /// Watch [path] for changes and emit a freshly-parsed [TerminalConfig] on
+  /// each change (debounced). The first event is the current file (or defaults
+  /// if absent). Parse failures keep the last-good config (logged, not emitted
+  /// as broken). Library hosts that build config in-memory skip this entirely.
+  static Stream<TerminalConfig> watch(String path,
+      {Duration debounce = const Duration(milliseconds: 150)}) {
+    final controller = StreamController<TerminalConfig>();
+    final file = File(path);
+    final dir = file.parent;
+    Timer? timer;
+    TerminalConfig lastGood = loadFile(path);
+
+    void reload() {
+      timer?.cancel();
+      timer = Timer(debounce, () {
+        try {
+          if (file.existsSync()) {
+            lastGood = TerminalConfig.fromTomlString(file.readAsStringSync());
+          }
+          controller.add(lastGood);
+        } catch (e) {
+          debugPrint('config watch: reparse failed ($e); keeping last-good');
+        }
+      });
+    }
+
+    StreamSubscription<FileSystemEvent>? sub;
+    controller.onListen = () {
+      controller.add(lastGood);
+      sub = dir.watch(events: FileSystemEvent.all).listen((e) {
+        if (e.path == path || e.path.endsWith(file.uri.pathSegments.last)) {
+          reload();
+        }
+      });
+    };
+    controller.onCancel = () async {
+      timer?.cancel();
+      await sub?.cancel();
+    };
+    return controller.stream;
+  }
 }

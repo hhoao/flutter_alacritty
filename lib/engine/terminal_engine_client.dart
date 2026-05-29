@@ -197,6 +197,14 @@ class TerminalEngineClient {
     refreshView();
   }
 
+  void clearHistory() {
+    _binding.clearHistory();
+    refreshView();
+  }
+
+  /// Drain terminal→host events synchronously (e.g. OSC 52 paste reply).
+  void pumpEventsNow() => _binding.pumpEvents();
+
   void dispose() {
     _disposed = true;
     _binding.dispose();

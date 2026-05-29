@@ -8,6 +8,7 @@
 /// of the cell under the cursor" (alacritty parity).
 library;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/painting.dart' show TextStyle;
 
 /// All colors a [TerminalView] needs to paint a frame and the bell overlay.
@@ -88,12 +89,18 @@ class TerminalStyle {
     this.fallback = const <String>[],
     this.size = 14.0,
     this.lineHeight = 1.0,
+    this.boldFamily,
+    this.italicFamily,
+    this.boldItalicFamily,
   });
 
   final String family;
   final List<String> fallback;
   final double size;
   final double lineHeight;
+  final String? boldFamily;
+  final String? italicFamily;
+  final String? boldItalicFamily;
 
   /// Build the [TextStyle] the renderer measures cells from.
   TextStyle toTextStyle() => TextStyle(
@@ -108,11 +115,45 @@ class TerminalStyle {
     List<String>? fallback,
     double? size,
     double? lineHeight,
+    String? boldFamily,
+    String? italicFamily,
+    String? boldItalicFamily,
   }) =>
       TerminalStyle(
         family: family ?? this.family,
         fallback: fallback ?? this.fallback,
         size: size ?? this.size,
         lineHeight: lineHeight ?? this.lineHeight,
+        boldFamily: boldFamily ?? this.boldFamily,
+        italicFamily: italicFamily ?? this.italicFamily,
+        boldItalicFamily: boldItalicFamily ?? this.boldItalicFamily,
+      );
+
+  // Value equality so `TerminalView.didUpdateWidget` only flushes the glyph
+  // cache / remeasures metrics when a font-relevant field actually changes —
+  // `TerminalConfig.style` returns a fresh instance on every build, so identity
+  // equality would re-flush on every unrelated parent setState.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TerminalStyle &&
+          runtimeType == other.runtimeType &&
+          family == other.family &&
+          size == other.size &&
+          lineHeight == other.lineHeight &&
+          boldFamily == other.boldFamily &&
+          italicFamily == other.italicFamily &&
+          boldItalicFamily == other.boldItalicFamily &&
+          listEquals(fallback, other.fallback);
+
+  @override
+  int get hashCode => Object.hash(
+        family,
+        Object.hashAll(fallback),
+        size,
+        lineHeight,
+        boldFamily,
+        italicFamily,
+        boldItalicFamily,
       );
 }

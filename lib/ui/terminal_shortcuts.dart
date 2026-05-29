@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -33,6 +34,44 @@ class DecreaseFontSizeIntent extends Intent {
 /// Intent: reset font size to the baseline configured size.
 class ResetFontSizeIntent extends Intent {
   const ResetFontSizeIntent();
+}
+
+/// Send raw bytes to the engine (alacritty Action::Esc / `chars`).
+class SendEscapeIntent extends Intent {
+  const SendEscapeIntent(this.bytes);
+  final List<int> bytes;
+}
+
+class ScrollPageIntent extends Intent {
+  const ScrollPageIntent({required this.up, this.half = false});
+  final bool up;
+  final bool half;
+}
+
+class ScrollLineIntent extends Intent {
+  const ScrollLineIntent({required this.up});
+  final bool up;
+}
+
+class ScrollToEdgeIntent extends Intent {
+  const ScrollToEdgeIntent({required this.top});
+  final bool top;
+}
+
+class ClearHistoryIntent extends Intent {
+  const ClearHistoryIntent();
+}
+
+class ClearSelectionIntent extends Intent {
+  const ClearSelectionIntent();
+}
+
+/// Recognized-but-unsupported alacritty actions (vi/tabs/window/fullscreen…).
+/// Wired to a no-op so config validates and the host can override via
+/// `TerminalView.actions`. [name] is the alacritty action name (for logging).
+class UnsupportedActionIntent extends Intent {
+  const UnsupportedActionIntent(this.name);
+  final String name;
 }
 
 /// Default key bindings for the terminal view. Consumers can override
@@ -146,6 +185,44 @@ Map<Type, Action<Intent>> defaultTerminalActions({
     }),
     ResetFontSizeIntent: CallbackAction<ResetFontSizeIntent>(onInvoke: (_) {
       onSetZoom(baselineFontSize);
+      return null;
+    }),
+    SendEscapeIntent: CallbackAction<SendEscapeIntent>(onInvoke: (i) {
+      controller.onTerminalInputStart();
+      engine.write(Uint8List.fromList(i.bytes));
+      return null;
+    }),
+    ScrollPageIntent: CallbackAction<ScrollPageIntent>(onInvoke: (i) {
+      final rows = engine.grid.rows;
+      final lines = (i.half ? (rows ~/ 2) : rows) * (i.up ? 1 : -1);
+      engine.scrollLines(lines);
+      return null;
+    }),
+    ScrollLineIntent: CallbackAction<ScrollLineIntent>(onInvoke: (i) {
+      engine.scrollLines(i.up ? 1 : -1);
+      return null;
+    }),
+    ScrollToEdgeIntent: CallbackAction<ScrollToEdgeIntent>(onInvoke: (i) {
+      if (i.top) {
+        engine.scrollLines(1 << 30); // clamps to top of history
+      } else {
+        engine.scrollToBottom();
+      }
+      return null;
+    }),
+    ClearHistoryIntent: CallbackAction<ClearHistoryIntent>(onInvoke: (_) {
+      engine.clearHistory();
+      return null;
+    }),
+    ClearSelectionIntent: CallbackAction<ClearSelectionIntent>(onInvoke: (_) {
+      controller.clearSelection();
+      return null;
+    }),
+    UnsupportedActionIntent: CallbackAction<UnsupportedActionIntent>(onInvoke: (i) {
+      assert(() {
+        debugPrint('flutter_alacritty: keybinding action "${i.name}" not supported (ignored)');
+        return true;
+      }());
       return null;
     }),
   };

@@ -48,6 +48,7 @@ void main() {
       required void Function(String) onTitle,
       required void Function() onBell,
       required void Function(String) onClipboard,
+      required void Function() onClipboardLoad,
       required engineConfig,
     }) => FakeBinding();
 
@@ -78,7 +79,7 @@ void main() {
       home: ExampleTerminalApp(
         title: ValueNotifier('t'),
         ptyFactory: boom,
-        engineFactory: ({required columns, required rows, required onPtyWrite, required onTitle, required onBell, required onClipboard, required engineConfig}) => FakeBinding(),
+        engineFactory: ({required columns, required rows, required onPtyWrite, required onTitle, required onBell, required onClipboard, required onClipboardLoad, required engineConfig}) => FakeBinding(),
       ),
     ));
     await tester.pumpAndSettle();
@@ -100,6 +101,7 @@ void main() {
           required onTitle,
           required onBell,
           required onClipboard,
+          required onClipboardLoad,
           required engineConfig,
         }) => FakeBinding(),
       ),
@@ -119,7 +121,7 @@ void main() {
         engineFactory: ({
           required columns, required rows,
           required onPtyWrite, required onTitle,
-          required onBell, required onClipboard, required engineConfig,
+          required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
         }) => FakeBinding(),
       ),
     ));
@@ -145,7 +147,7 @@ void main() {
         engineFactory: ({
           required columns, required rows,
           required onPtyWrite, required onTitle,
-          required onBell, required onClipboard, required engineConfig,
+          required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
         }) => FakeBinding(),
       ),
     ));
@@ -189,6 +191,7 @@ void main() {
           required onTitle,
           required onBell,
           required onClipboard,
+          required onClipboardLoad,
           required engineConfig,
         }) => binding,
       ),
@@ -218,6 +221,7 @@ void main() {
           required onTitle,
           required onBell,
           required onClipboard,
+          required onClipboardLoad,
           required engineConfig,
         }) => ClearOnTapBinding(() => clears++),
       ),
@@ -253,6 +257,7 @@ void main() {
           required onTitle,
           required onBell,
           required onClipboard,
+          required onClipboardLoad,
           required engineConfig,
         }) => binding,
       ),
@@ -282,6 +287,7 @@ void main() {
           required onTitle,
           required onBell,
           required onClipboard,
+          required onClipboardLoad,
           required engineConfig,
         }) => binding,
         launchUrl: (u) async {
@@ -314,7 +320,7 @@ void main() {
       engineFactory: ({
         required columns, required rows,
         required onPtyWrite, required onTitle,
-        required onBell, required onClipboard, required engineConfig,
+        required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
       }) => binding,
     )));
     await tester.pump();
@@ -362,6 +368,7 @@ void main() {
           required onTitle,
           required onBell,
           required onClipboard,
+          required onClipboardLoad,
           required engineConfig,
         }) => FakeBinding(),
       ),
@@ -402,6 +409,7 @@ void main() {
           required onTitle,
           required onBell,
           required onClipboard,
+          required onClipboardLoad,
           required engineConfig,
         }) => FakeBinding(),
       ),
@@ -432,6 +440,7 @@ void main() {
           required onTitle,
           required onBell,
           required onClipboard,
+          required onClipboardLoad,
           required engineConfig,
         }) => binding,
       ),
@@ -463,7 +472,7 @@ void main() {
       engineFactory: ({
         required columns, required rows,
         required onPtyWrite, required onTitle,
-        required onBell, required onClipboard, required engineConfig,
+        required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
       }) => FakeBinding(),
     )));
     await tester.pump();
@@ -481,7 +490,7 @@ void main() {
       engineFactory: ({
         required columns, required rows,
         required onPtyWrite, required onTitle,
-        required onBell, required onClipboard, required engineConfig,
+        required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
       }) => binding,
     )));
     await tester.pump();
@@ -518,7 +527,7 @@ void main() {
       engineFactory: ({
         required columns, required rows,
         required onPtyWrite, required onTitle,
-        required onBell, required onClipboard, required engineConfig,
+        required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
       }) => FakeBinding(),
     )));
     await tester.pump();
@@ -544,7 +553,7 @@ void main() {
       engineFactory: ({
         required columns, required rows,
         required onPtyWrite, required onTitle,
-        required onBell, required onClipboard, required engineConfig,
+        required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
       }) => FakeBinding(),
     )));
     await tester.pump();
@@ -570,7 +579,7 @@ void main() {
       engineFactory: ({
         required columns, required rows,
         required onPtyWrite, required onTitle,
-        required onBell, required onClipboard, required engineConfig,
+        required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
       }) => FakeBinding(),
     )));
     await tester.pump();
@@ -601,7 +610,7 @@ void main() {
       engineFactory: ({
         required columns, required rows,
         required onPtyWrite, required onTitle,
-        required onBell, required onClipboard, required engineConfig,
+        required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
       }) => binding,
     )));
     await tester.pumpAndSettle();
@@ -635,7 +644,7 @@ void main() {
       engineFactory: ({
         required columns, required rows,
         required onPtyWrite, required onTitle,
-        required onBell, required onClipboard, required engineConfig,
+        required onBell, required onClipboard, required onClipboardLoad, required engineConfig,
       }) => binding,
     )));
     await tester.pump();

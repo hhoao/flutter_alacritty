@@ -55,7 +55,7 @@ extension EngineEventPatterns on EngineEvent {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( EngineEvent_PtyWrite value)?  ptyWrite,TResult Function( EngineEvent_Title value)?  title,TResult Function( EngineEvent_ResetTitle value)?  resetTitle,TResult Function( EngineEvent_Bell value)?  bell,TResult Function( EngineEvent_ClipboardStore value)?  clipboardStore,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( EngineEvent_PtyWrite value)?  ptyWrite,TResult Function( EngineEvent_Title value)?  title,TResult Function( EngineEvent_ResetTitle value)?  resetTitle,TResult Function( EngineEvent_Bell value)?  bell,TResult Function( EngineEvent_ClipboardStore value)?  clipboardStore,TResult Function( EngineEvent_ClipboardLoad value)?  clipboardLoad,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case EngineEvent_PtyWrite() when ptyWrite != null:
@@ -63,7 +63,8 @@ return ptyWrite(_that);case EngineEvent_Title() when title != null:
 return title(_that);case EngineEvent_ResetTitle() when resetTitle != null:
 return resetTitle(_that);case EngineEvent_Bell() when bell != null:
 return bell(_that);case EngineEvent_ClipboardStore() when clipboardStore != null:
-return clipboardStore(_that);case _:
+return clipboardStore(_that);case EngineEvent_ClipboardLoad() when clipboardLoad != null:
+return clipboardLoad(_that);case _:
   return orElse();
 
 }
@@ -81,7 +82,7 @@ return clipboardStore(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( EngineEvent_PtyWrite value)  ptyWrite,required TResult Function( EngineEvent_Title value)  title,required TResult Function( EngineEvent_ResetTitle value)  resetTitle,required TResult Function( EngineEvent_Bell value)  bell,required TResult Function( EngineEvent_ClipboardStore value)  clipboardStore,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( EngineEvent_PtyWrite value)  ptyWrite,required TResult Function( EngineEvent_Title value)  title,required TResult Function( EngineEvent_ResetTitle value)  resetTitle,required TResult Function( EngineEvent_Bell value)  bell,required TResult Function( EngineEvent_ClipboardStore value)  clipboardStore,required TResult Function( EngineEvent_ClipboardLoad value)  clipboardLoad,}){
 final _that = this;
 switch (_that) {
 case EngineEvent_PtyWrite():
@@ -89,7 +90,8 @@ return ptyWrite(_that);case EngineEvent_Title():
 return title(_that);case EngineEvent_ResetTitle():
 return resetTitle(_that);case EngineEvent_Bell():
 return bell(_that);case EngineEvent_ClipboardStore():
-return clipboardStore(_that);}
+return clipboardStore(_that);case EngineEvent_ClipboardLoad():
+return clipboardLoad(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -103,7 +105,7 @@ return clipboardStore(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( EngineEvent_PtyWrite value)?  ptyWrite,TResult? Function( EngineEvent_Title value)?  title,TResult? Function( EngineEvent_ResetTitle value)?  resetTitle,TResult? Function( EngineEvent_Bell value)?  bell,TResult? Function( EngineEvent_ClipboardStore value)?  clipboardStore,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( EngineEvent_PtyWrite value)?  ptyWrite,TResult? Function( EngineEvent_Title value)?  title,TResult? Function( EngineEvent_ResetTitle value)?  resetTitle,TResult? Function( EngineEvent_Bell value)?  bell,TResult? Function( EngineEvent_ClipboardStore value)?  clipboardStore,TResult? Function( EngineEvent_ClipboardLoad value)?  clipboardLoad,}){
 final _that = this;
 switch (_that) {
 case EngineEvent_PtyWrite() when ptyWrite != null:
@@ -111,7 +113,8 @@ return ptyWrite(_that);case EngineEvent_Title() when title != null:
 return title(_that);case EngineEvent_ResetTitle() when resetTitle != null:
 return resetTitle(_that);case EngineEvent_Bell() when bell != null:
 return bell(_that);case EngineEvent_ClipboardStore() when clipboardStore != null:
-return clipboardStore(_that);case _:
+return clipboardStore(_that);case EngineEvent_ClipboardLoad() when clipboardLoad != null:
+return clipboardLoad(_that);case _:
   return null;
 
 }
@@ -128,14 +131,15 @@ return clipboardStore(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( Uint8List field0)?  ptyWrite,TResult Function( String field0)?  title,TResult Function()?  resetTitle,TResult Function()?  bell,TResult Function( String field0)?  clipboardStore,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( Uint8List field0)?  ptyWrite,TResult Function( String field0)?  title,TResult Function()?  resetTitle,TResult Function()?  bell,TResult Function( String field0)?  clipboardStore,TResult Function()?  clipboardLoad,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case EngineEvent_PtyWrite() when ptyWrite != null:
 return ptyWrite(_that.field0);case EngineEvent_Title() when title != null:
 return title(_that.field0);case EngineEvent_ResetTitle() when resetTitle != null:
 return resetTitle();case EngineEvent_Bell() when bell != null:
 return bell();case EngineEvent_ClipboardStore() when clipboardStore != null:
-return clipboardStore(_that.field0);case _:
+return clipboardStore(_that.field0);case EngineEvent_ClipboardLoad() when clipboardLoad != null:
+return clipboardLoad();case _:
   return orElse();
 
 }
@@ -153,14 +157,15 @@ return clipboardStore(_that.field0);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( Uint8List field0)  ptyWrite,required TResult Function( String field0)  title,required TResult Function()  resetTitle,required TResult Function()  bell,required TResult Function( String field0)  clipboardStore,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( Uint8List field0)  ptyWrite,required TResult Function( String field0)  title,required TResult Function()  resetTitle,required TResult Function()  bell,required TResult Function( String field0)  clipboardStore,required TResult Function()  clipboardLoad,}) {final _that = this;
 switch (_that) {
 case EngineEvent_PtyWrite():
 return ptyWrite(_that.field0);case EngineEvent_Title():
 return title(_that.field0);case EngineEvent_ResetTitle():
 return resetTitle();case EngineEvent_Bell():
 return bell();case EngineEvent_ClipboardStore():
-return clipboardStore(_that.field0);}
+return clipboardStore(_that.field0);case EngineEvent_ClipboardLoad():
+return clipboardLoad();}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -174,14 +179,15 @@ return clipboardStore(_that.field0);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( Uint8List field0)?  ptyWrite,TResult? Function( String field0)?  title,TResult? Function()?  resetTitle,TResult? Function()?  bell,TResult? Function( String field0)?  clipboardStore,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( Uint8List field0)?  ptyWrite,TResult? Function( String field0)?  title,TResult? Function()?  resetTitle,TResult? Function()?  bell,TResult? Function( String field0)?  clipboardStore,TResult? Function()?  clipboardLoad,}) {final _that = this;
 switch (_that) {
 case EngineEvent_PtyWrite() when ptyWrite != null:
 return ptyWrite(_that.field0);case EngineEvent_Title() when title != null:
 return title(_that.field0);case EngineEvent_ResetTitle() when resetTitle != null:
 return resetTitle();case EngineEvent_Bell() when bell != null:
 return bell();case EngineEvent_ClipboardStore() when clipboardStore != null:
-return clipboardStore(_that.field0);case _:
+return clipboardStore(_that.field0);case EngineEvent_ClipboardLoad() when clipboardLoad != null:
+return clipboardLoad();case _:
   return null;
 
 }
@@ -450,5 +456,37 @@ as String,
 
 
 }
+
+/// @nodoc
+
+
+class EngineEvent_ClipboardLoad extends EngineEvent {
+  const EngineEvent_ClipboardLoad(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is EngineEvent_ClipboardLoad);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'EngineEvent.clipboardLoad()';
+}
+
+
+}
+
+
+
 
 // dart format on
