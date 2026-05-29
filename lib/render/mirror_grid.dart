@@ -50,9 +50,40 @@ class GridUpdate {
   final int displayOffset;
 }
 
+/// Read-only view of the terminal grid that the engine exposes to consumers.
+///
+/// Implemented by [MirrorGrid]; lets external code read cell content, cursor
+/// state, mode flags, and listen for changes via the inherited [Listenable]
+/// without being able to mutate the grid. The mutable `apply` /
+/// `initializeEmpty` methods only exist on [MirrorGrid], which is
+/// package-internal — consumers should never touch them, and a read-only
+/// reference is sufficient for everything in the public API (painter rebind,
+/// hyperlink lookup, modeFlags / displayOffset gates).
+abstract class TerminalGridView implements Listenable {
+  int get rows;
+  int get columns;
+  int get cursorRow;
+  int get cursorCol;
+  bool get cursorVisible;
+  int get cursorShape;
+  bool get cursorBlinking;
+  int get modeFlags;
+  int get displayOffset;
+
+  /// Bumped on every grid mutation. Painters use this to short-circuit
+  /// `shouldRepaint`.
+  int get generation;
+
+  int codepointAt(int row, int col);
+  int fgAt(int row, int col);
+  int bgAt(int row, int col);
+  int flagsAt(int row, int col);
+  int hyperlinkIdAt(int row, int col);
+}
+
 /// Mutable terminal grid. Applies incremental line deltas in place and notifies
 /// the painter to repaint.
-class MirrorGrid extends ChangeNotifier {
+class MirrorGrid extends ChangeNotifier implements TerminalGridView {
   /// [defaultFg]/[defaultBg] fill empty/newly-grown cells. They must match the
   /// engine's blank-cell colors (the configured default fg/bg) so untouched rows
   /// — which the engine never sends partial damage for — render in the right
@@ -80,22 +111,37 @@ class MirrorGrid extends ChangeNotifier {
   int _displayOffset = 0;
 
   /// Bumps on every [apply] / [initializeEmpty]; used by [TerminalPainter.shouldRepaint].
+  @override
   int get generation => _generation;
 
+  @override
   int get rows => _rows;
+  @override
   int get columns => _columns;
+  @override
   int get cursorRow => _cursorRow;
+  @override
   int get cursorCol => _cursorCol;
+  @override
   bool get cursorVisible => _cursorVisible;
+  @override
   int get cursorShape => _cursorShape;
+  @override
   bool get cursorBlinking => _cursorBlinking;
+  @override
   int get modeFlags => _modeFlags;
+  @override
   int get displayOffset => _displayOffset;
 
+  @override
   int codepointAt(int row, int col) => _codepoints[row][col];
+  @override
   int fgAt(int row, int col) => _fg[row][col];
+  @override
   int bgAt(int row, int col) => _bg[row][col];
+  @override
   int flagsAt(int row, int col) => _flags[row][col];
+  @override
   int hyperlinkIdAt(int row, int col) => _hyperlinkId[row][col];
 
   void _ensureSize(int rows, int columns) {

@@ -115,6 +115,31 @@ class TerminalController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Mirror of alacritty `event.rs:on_terminal_input_start`. Call this from
+  /// every "user just typed / pasted / dropped" entry point — the gates
+  /// ensure no FFI snapshot fires when there's nothing to clear and the
+  /// viewport is already at the bottom (this is the Plan 2L perf fix).
+  ///
+  /// Lives on the controller so all input drivers (view's keystroke path,
+  /// `defaultPasteAction`, host-side paste / drop) share a single
+  /// implementation and stay in lock-step.
+  void onTerminalInputStart() {
+    final engine = _engine;
+    if (engine == null) return;
+    final scrolledBack = engine.grid.displayOffset != 0;
+    if (scrolledBack) {
+      // fire-and-forget; engine.scrollToBottom internally calls refreshView
+      // so we skip the separate refresh path below.
+      engine.scrollToBottom();
+    }
+    if (_selectionActive) {
+      engine.selectionClear();
+      _selectionActive = false;
+      if (!scrolledBack) engine.refreshView();
+      notifyListeners();
+    }
+  }
+
   // ---- scroll ------------------------------------------------------------
 
   Future<void> scrollLines(int delta) async {

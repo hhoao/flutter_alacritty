@@ -101,6 +101,86 @@ void main() {
     expect(gotCell, isNotNull);
   });
 
+  // Regression for the engine-swap bug caught in 2W code review: TerminalView
+  // subscribes to engine.bell in initState but didUpdateWidget originally
+  // didn't compare widget.engine to oldWidget.engine, so after a host-driven
+  // engine swap (e.g. shell restart) the bell stream pointed at the disposed
+  // OLD engine and any Bell event was silently lost.
+  testWidgets('bell after engine swap still flashes the visual bell',
+      (tester) async {
+    final binding1 = FakeBinding();
+    final engine1 = TerminalEngine.fromBinding(
+      binding1,
+      config: TerminalConfig.defaults(),
+      schedule: (_) {},
+    );
+    final binding2 = FakeBinding();
+    final engine2 = TerminalEngine.fromBinding(
+      binding2,
+      config: TerminalConfig.defaults(),
+      schedule: (_) {},
+    );
+    addTearDown(() {
+      engine1.dispose();
+      engine2.dispose();
+    });
+
+    // The harness lets the test swap the engine prop and triggers
+    // didUpdateWidget on the inner TerminalView.
+    final engineNotifier = ValueNotifier<TerminalEngine>(engine1);
+    addTearDown(engineNotifier.dispose);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ValueListenableBuilder<TerminalEngine>(
+          valueListenable: engineNotifier,
+          builder: (context, engine, _) => TerminalView(
+            engine,
+            // Non-zero duration so _flashBell actually animates the
+            // controller (zero-duration short-circuits).
+            bellDuration: const Duration(milliseconds: 100),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    AnimationController bellCtrl() {
+      final state = tester.state<TerminalViewState>(find.byType(TerminalView));
+      return state.bellControllerForTest;
+    }
+
+    // Drive bell events through the rewired binding callback directly —
+    // simpler than queueing a pendingEvent + feeding through the drain (which
+    // would need the schedule shim wired). `_bindEager` populates binding.onBell
+    // at fromBinding construction time, pointing at the engine's bellCtl.add.
+
+    // Sanity: pre-swap bell fires through engine1.
+    binding1.onBell!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 5));
+    expect(bellCtrl().value, greaterThan(0.0),
+        reason: 'bell on the initial engine should animate the controller');
+
+    // Let the animation settle so we observe a fresh trigger after the swap.
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(bellCtrl().value, 0.0);
+
+    // SWAP the engine — Without the didUpdateWidget fix, _bellSub still
+    // points at engine1 (whose stream is about to close on dispose), so
+    // the next bell would be dropped.
+    engineNotifier.value = engine2;
+    await tester.pump();
+
+    binding2.onBell!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 5));
+    expect(bellCtrl().value, greaterThan(0.0),
+        reason:
+            'bell on the swapped-in engine must also animate — TerminalView '
+            'must cancel + re-subscribe _bellSub on engine identity change');
+  });
+
   testWidgets('onLinkActivate fires for Ctrl+left-click on a hyperlink cell',
       (tester) async {
     final binding = FakeBinding()

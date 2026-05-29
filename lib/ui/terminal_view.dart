@@ -163,6 +163,13 @@ class TerminalViewState extends State<TerminalView>
   bool _lastFocused = false;
   int _pressedButton = 0;
   int _clickCount = 0;
+  // Secondary-tap (right click) state: filled on press, drained on release.
+  // Lets us fire `onSecondaryTapUp` at the correct moment instead of
+  // synchronously on press (which was the original bug — both Down and Up
+  // fired in [_onPointerDown], breaking any consumer wiring both).
+  CellOffset? _secondaryDownCell;
+  Offset? _secondaryDownLocal;
+  Offset? _secondaryDownGlobal;
   DateTime _lastClick = DateTime.fromMillisecondsSinceEpoch(0);
   bool _selecting = false;
   double _touchScrollAccum = 0;
@@ -220,6 +227,18 @@ class TerminalViewState extends State<TerminalView>
   @override
   void didUpdateWidget(covariant TerminalView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Engine swap: the host replaced the engine (e.g. ExampleTerminalApp
+    // restart after shell exit). Cancel the bell subscription pointing at
+    // the OLD engine — whose stream controller has already been closed by
+    // `engine.dispose()` — and re-subscribe to the new engine's bell. Without
+    // this, post-restart Bell events flow into a dead stream and the visual
+    // / audible bell silently breaks. Pinned by the regression test
+    // `bell after engine swap still flashes`.
+    if (!identical(widget.engine, oldWidget.engine)) {
+      _bellSub?.cancel();
+      _bellSub = widget.engine.bell.listen((_) => _flashBell());
+      _lastReportedCaretRect = null;
+    }
     // Re-attach controller / focus if the caller swapped them out. Rare; the
     // host typically creates both once.
     if (!identical(widget.controller, oldWidget.controller)) {
@@ -228,11 +247,13 @@ class TerminalViewState extends State<TerminalView>
       _ownsController = widget.controller == null;
     }
     if (!identical(widget.focusNode, oldWidget.focusNode)) {
-      if (_ownsFocus) {
-        _focus.removeListener(_reportFocus);
-        _focus.removeListener(_handleImeFocusChange);
-        _focus.dispose();
-      }
+      // Always remove our listeners from the old node regardless of ownership
+      // — otherwise a host-supplied node that gets swapped out retains our
+      // listeners forever (memory leak + spurious callbacks against the
+      // disposed view).
+      _focus.removeListener(_reportFocus);
+      _focus.removeListener(_handleImeFocusChange);
+      if (_ownsFocus) _focus.dispose();
       _focus = widget.focusNode ?? FocusNode();
       _ownsFocus = widget.focusNode == null;
       _focus.addListener(_reportFocus);
@@ -346,20 +367,23 @@ class TerminalViewState extends State<TerminalView>
     );
     if (bytes == null) return KeyEventResult.ignored;
     _onTerminalInputStart();
-    _engine.write(bytes);
+    _writeToEngine(bytes);
     return KeyEventResult.handled;
   }
 
-  /// Mirror alacritty event.rs:on_terminal_input_start.
-  void _onTerminalInputStart() {
-    final scrolledBack = _grid.displayOffset != 0;
-    if (scrolledBack) {
-      _engine.scrollToBottom();
-    }
-    if (_controller.selectionActive) {
-      _controller.clearSelection();
-      if (!scrolledBack) _refreshSelection();
-    }
+  /// Mirror alacritty event.rs:on_terminal_input_start. Delegates to the
+  /// controller so the host paste/drop paths (`ExampleTerminalApp._paste` /
+  /// `_onDrop` / `defaultPasteAction`) share the same gated implementation.
+  void _onTerminalInputStart() => _controller.onTerminalInputStart();
+
+  /// Write helper that drops bytes when [TerminalView.readOnly] is set.
+  /// Centralizes the gate so every PTY-bound path (keys, mouse reports,
+  /// IME commits, paste, focus reports, scroll-as-arrows) honors readOnly
+  /// uniformly. Without this the prop would only have gated `_onKeyFallback`,
+  /// leaving mouse/IME/middle-paste paths leaking bytes — caught in review.
+  void _writeToEngine(Uint8List bytes) {
+    if (widget.readOnly) return;
+    _engine.write(bytes);
   }
 
   void _reportFocus() {
@@ -369,7 +393,7 @@ class TerminalViewState extends State<TerminalView>
     }
     if (_focus.hasFocus == _lastFocused) return;
     _lastFocused = _focus.hasFocus;
-    _engine.write(Uint8List.fromList(
+    _writeToEngine(Uint8List.fromList(
         _focus.hasFocus ? [0x1b, 0x5b, 0x49] : [0x1b, 0x5b, 0x4f]));
   }
 
@@ -390,7 +414,7 @@ class TerminalViewState extends State<TerminalView>
 
   void _writeCommittedText(String t) {
     if (t.isEmpty) return;
-    _engine.write(Uint8List.fromList(utf8.encode(t)));
+    _writeToEngine(Uint8List.fromList(utf8.encode(t)));
   }
 
   void _reportCaretRectToIme() {
@@ -437,7 +461,7 @@ class TerminalViewState extends State<TerminalView>
         alt: hw.isAltPressed,
         ctrl: hw.isControlPressed,
         modeFlags: _grid.modeFlags);
-    if (bytes != null) _engine.write(bytes);
+    if (bytes != null) _writeToEngine(bytes);
   }
 
   int _btn(int buttons) => (buttons & kSecondaryButton) != 0
@@ -461,7 +485,7 @@ class TerminalViewState extends State<TerminalView>
     } else if (_grid.modeFlags & kModeAltScreen != 0) {
       final arrow = up ? [0x1b, 0x4f, 0x41] : [0x1b, 0x4f, 0x42];
       for (var i = 0; i < n; i++) {
-        _engine.write(Uint8List.fromList(arrow));
+        _writeToEngine(Uint8List.fromList(arrow));
       }
     } else {
       _engine.scrollLines(up ? n : -n);
@@ -651,12 +675,19 @@ class TerminalViewState extends State<TerminalView>
         e.buttons & kMiddleMouseButton != 0 &&
         _controller.primary.isNotEmpty) {
       _onTerminalInputStart();
-      _engine.write(
+      _writeToEngine(
           pasteBytes(_controller.primary, modeFlags: _grid.modeFlags));
       return;
     }
     if (e.buttons & kSecondaryButton != 0 && !hw.isShiftPressed) {
+      // Track this as a pending secondary tap so [_onPointerUp] can fire
+      // `onSecondaryTapUp` on real release — fixes the press-time double-fire
+      // caught in review. `onSecondaryTapDown` still fires immediately on
+      // press; `onSecondaryTapUp` waits for the release event.
       final (r, c, _) = _cellAt(e.localPosition);
+      _secondaryDownCell = CellOffset(r, c);
+      _secondaryDownLocal = e.localPosition;
+      _secondaryDownGlobal = e.position;
       if (widget.onSecondaryTapDown != null) {
         widget.onSecondaryTapDown!(
           TapDownDetails(
@@ -664,17 +695,7 @@ class TerminalViewState extends State<TerminalView>
             localPosition: e.localPosition,
             kind: e.kind,
           ),
-          CellOffset(r, c),
-        );
-      }
-      if (widget.onSecondaryTapUp != null) {
-        widget.onSecondaryTapUp!(
-          TapUpDetails(
-            globalPosition: e.position,
-            localPosition: e.localPosition,
-            kind: e.kind,
-          ),
-          CellOffset(r, c),
+          _secondaryDownCell!,
         );
       }
       return;
@@ -701,6 +722,28 @@ class TerminalViewState extends State<TerminalView>
 
   void _onPointerUp(PointerUpEvent e) {
     if (e.kind != PointerDeviceKind.mouse) return;
+    // Drain a pending secondary press. Use the down-time cell so the
+    // callback reports where the right click started, matching the
+    // GestureDetector.onSecondaryTapUp convention.
+    if (_secondaryDownCell != null) {
+      final downCell = _secondaryDownCell!;
+      final downLocal = _secondaryDownLocal ?? e.localPosition;
+      final downGlobal = _secondaryDownGlobal ?? e.position;
+      _secondaryDownCell = null;
+      _secondaryDownLocal = null;
+      _secondaryDownGlobal = null;
+      if (widget.onSecondaryTapUp != null) {
+        widget.onSecondaryTapUp!(
+          TapUpDetails(
+            globalPosition: downGlobal,
+            localPosition: downLocal,
+            kind: e.kind,
+          ),
+          downCell,
+        );
+      }
+      return;
+    }
     if (_selecting) {
       _selecting = false;
       _controller.capturePrimary();
@@ -731,7 +774,7 @@ class TerminalViewState extends State<TerminalView>
     if (_grid.modeFlags & kModeAltScreen != 0) {
       final arrow = up ? [0x1b, 0x4f, 0x41] : [0x1b, 0x4f, 0x42];
       for (var i = 0; i < 3; i++) {
-        _engine.write(Uint8List.fromList(arrow));
+        _writeToEngine(Uint8List.fromList(arrow));
       }
       return;
     }

@@ -9,6 +9,10 @@ import '../src/rust/engine.dart' show EngineConfig;
 import 'engine_binding.dart';
 import 'terminal_engine_client.dart';
 
+// Re-export the read-only grid view so external consumers can use it without
+// importing the render-layer module directly.
+export '../render/mirror_grid.dart' show TerminalGridView;
+
 /// Factory that builds an [EngineBinding] given the engine event callbacks.
 /// The four callbacks are wired into private streams/notifiers on
 /// [TerminalEngine] — consumers never see the raw `on*` callbacks.
@@ -102,10 +106,18 @@ class TerminalEngine {
   /// object as the underlying [MirrorGrid], which is a [ChangeNotifier].
   Listenable get repaint => _grid;
 
-  /// Package-internal: the rendering view needs the [MirrorGrid] to read
-  /// cells. Not part of the consumer surface — external consumers should rely
-  /// on [repaint] + [hyperlinkAt] / [selectionText] / etc. instead. (Cannot
-  /// use `@internal` here because this lives in a public-library element.)
+  /// Read-only view of the terminal grid. Consumers can read cell content,
+  /// cursor position, mode flags, displayOffset, and listen for changes via
+  /// the inherited [Listenable] — but cannot mutate. The mutable handle is
+  /// reserved for the in-package [TerminalView] painter via [gridForView].
+  TerminalGridView get grid => _grid;
+
+  /// Package-internal: the rendering view needs the mutable [MirrorGrid] to
+  /// wire `CustomPaint(repaint: ...)` and read cells. **External consumers
+  /// should use [grid] instead** — mutating the returned [MirrorGrid] will
+  /// corrupt the engine's mirror. (Cannot use `@internal` here because this
+  /// lives in a public-library element; see follow-up note in 2W findings
+  /// about moving the engine to `lib/src/` to fix the annotation.)
   MirrorGrid get gridForView => _grid;
 
   /// PTY → engine. Lazy-inits the binding on first call.

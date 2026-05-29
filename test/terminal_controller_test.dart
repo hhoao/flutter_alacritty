@@ -157,6 +157,40 @@ void main() {
       expect(binding.scrollToBottomCalls, 1);
     });
 
+    // Plan 2W code-review fix: onTerminalInputStart lives on the controller
+    // so paste / drop / keystroke paths share one gated implementation. These
+    // tests pin the gates so the paste path (defaultPasteAction) can't drift
+    // and leave stale selection highlights.
+    test('onTerminalInputStart with no selection at bottom does nothing',
+        () {
+      var notifies = 0;
+      controller.addListener(() => notifies++);
+      controller.onTerminalInputStart();
+      expect(notifies, 0);
+      expect(binding.selClearCalls, 0);
+      expect(binding.scrollToBottomCalls, 0);
+      expect(binding.fullSnapshotCalls, 0,
+          reason: 'gate matches alacritty event.rs:on_terminal_input_start');
+    });
+
+    test('onTerminalInputStart with active selection clears + refreshes',
+        () {
+      // Regression for the defaultPasteAction bug: clearing selection without
+      // a follow-up refreshView leaves cells visually highlighted until the
+      // paste echo damage arrives.
+      controller.selectionStart(0, 0, false, 0);
+      final snapshotsBefore = binding.fullSnapshotCalls;
+      controller.onTerminalInputStart();
+      expect(controller.selectionActive, isFalse);
+      expect(binding.selClearCalls, 1);
+      expect(binding.fullSnapshotCalls, greaterThan(snapshotsBefore),
+          reason:
+              'must trigger a viewport snapshot so the painter drops the '
+              'now-empty selection highlights');
+      expect(binding.scrollToBottomCalls, 0,
+          reason: 'displayOffset == 0 → no redundant scroll');
+    });
+
     test('dispose drops the engine reference', () {
       final c = TerminalController()..attach(engine);
       expect(c.engine, same(engine));

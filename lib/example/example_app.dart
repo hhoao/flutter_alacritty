@@ -217,7 +217,9 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     } else {
       _controller.searchSet(pattern);
     }
-    setState(() {});
+    // No setState — the search bar is wrapped in ListenableBuilder over the
+    // controller (Fix #9), so it rebuilds automatically when searchValid
+    // flips.
   }
 
   void _closeSearch() {
@@ -238,22 +240,11 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     final data = await Clipboard.getData('text/plain');
     final text = data?.text;
     if (text == null || text.isEmpty || _engine == null) return;
-    _onTerminalInputStart();
-    _engine!.write(pasteBytes(text, modeFlags: _engine!.gridForView.modeFlags));
-  }
-
-  /// Screen-level mirror of the View's _onTerminalInputStart, for the paste /
-  /// drop paths whose entry point is on the screen rather than the View.
-  /// Same alacritty event.rs:on_terminal_input_start semantics.
-  void _onTerminalInputStart() {
-    if (_engine == null) return;
-    final grid = _engine!.gridForView;
-    final scrolledBack = grid.displayOffset != 0;
-    if (scrolledBack) _engine!.scrollToBottom();
-    if (_controller.selectionActive) {
-      _controller.clearSelection();
-      if (!scrolledBack) _engine!.refreshView();
-    }
+    // Single source of truth for the alacritty event.rs:on_terminal_input_start
+    // gate — lives on the controller so the view's keystroke path and the
+    // screen's paste/drop paths can't drift apart.
+    _controller.onTerminalInputStart();
+    _engine!.write(pasteBytes(text, modeFlags: _engine!.grid.modeFlags));
   }
 
   void _copySelection() {
@@ -314,9 +305,8 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     final paths = details.files.map((f) => f.path).where((p) => p.isNotEmpty);
     if (paths.isEmpty) return;
     final joined = paths.map(_shellQuote).join(' ');
-    _onTerminalInputStart();
-    _engine?.write(
-        pasteBytes(joined, modeFlags: _engine!.gridForView.modeFlags));
+    _controller.onTerminalInputStart();
+    _engine?.write(pasteBytes(joined, modeFlags: _engine!.grid.modeFlags));
   }
 
   @visibleForTesting
@@ -426,19 +416,26 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                     // Always mounted under Offstage so first-time costs (IME
                     // attach on Linux, Material icon/font load) are paid at
                     // app startup — opening search just toggles visibility.
+                    // ListenableBuilder watches the controller so the
+                    // `invalidPattern` indicator stays current even when a
+                    // controller mutation happens via Actions/Shortcuts
+                    // without an enclosing setState.
                     Positioned(
                       left: 0,
                       right: 0,
                       bottom: 0,
                       child: Offstage(
                         offstage: !_searchOpen,
-                        child: TerminalSearchBar(
-                          visible: _searchOpen,
-                          invalidPattern: !_controller.searchValid,
-                          onChanged: _searchChanged,
-                          onNext: _controller.searchNext,
-                          onPrev: _controller.searchPrev,
-                          onClose: _closeSearch,
+                        child: ListenableBuilder(
+                          listenable: _controller,
+                          builder: (context, _) => TerminalSearchBar(
+                            visible: _searchOpen,
+                            invalidPattern: !_controller.searchValid,
+                            onChanged: _searchChanged,
+                            onNext: _controller.searchNext,
+                            onPrev: _controller.searchPrev,
+                            onClose: _closeSearch,
+                          ),
                         ),
                       ),
                     ),

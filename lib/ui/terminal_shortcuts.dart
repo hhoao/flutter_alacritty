@@ -76,10 +76,11 @@ void defaultCopyAction(TerminalEngine engine) {
 }
 
 /// Reads `text/plain` from the system clipboard and writes it to the engine,
-/// applying bracketed-paste encoding when active. Mirrors the alacritty
-/// `event.rs:on_terminal_input_start` behaviour (scrollback rewind +
-/// selection clear) so a stand-alone `TerminalView` paste matches the
-/// upstream "any input rewinds the viewport" UX.
+/// applying bracketed-paste encoding when active. Goes through
+/// [TerminalController.onTerminalInputStart] which mirrors alacritty
+/// `event.rs:on_terminal_input_start` — scrollback rewind, gated selection
+/// clear AND the follow-up `refreshView` so any prior selection highlight
+/// disappears from the painter before the paste echo arrives.
 Future<void> defaultPasteAction(
   TerminalEngine engine,
   TerminalController controller,
@@ -87,12 +88,8 @@ Future<void> defaultPasteAction(
   final data = await Clipboard.getData('text/plain');
   final text = data?.text;
   if (text == null || text.isEmpty) return;
-  final grid = engine.gridForView;
-  if (grid.displayOffset != 0) {
-    await engine.scrollToBottom();
-  }
-  controller.clearSelection();
-  engine.write(pasteBytes(text, modeFlags: grid.modeFlags));
+  controller.onTerminalInputStart();
+  engine.write(pasteBytes(text, modeFlags: engine.grid.modeFlags));
 }
 
 /// Default action handlers for the intents in [defaultTerminalShortcuts].
