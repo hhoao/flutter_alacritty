@@ -77,12 +77,12 @@ MouseCursor hoverCursorFor({
 /// menu, or URL launching — those stay on the host (the reference example
 /// is `ExampleTerminalApp`) and are wired in via the callback hooks below.
 class TerminalView extends StatefulWidget {
-  const TerminalView(
+  TerminalView(
     this.engine, {
     super.key,
     this.controller,
     this.theme = TerminalTheme.defaults,
-    this.textStyle = const TerminalStyle(),
+    TerminalStyle? textStyle,
     this.padding,
     this.backgroundOpacity = 1.0,
     this.focusNode,
@@ -106,7 +106,7 @@ class TerminalView extends StatefulWidget {
     this.onLinkActivate,
     this.onBell,
     this.onViewportResize,
-  });
+  }) : textStyle = textStyle ?? TerminalStyle.defaults();
 
   final TerminalEngine engine;
   final TerminalController? controller;

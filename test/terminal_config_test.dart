@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_alacritty/config/platform_font_defaults.dart';
 import 'package:flutter_alacritty/config/terminal_config.dart';
 
 void main() {
@@ -9,8 +10,8 @@ void main() {
     expect(c.colors.selection, 0x3A6EA5);
     expect(c.colors.ansi.length, 16);
     expect(c.colors.ansi[1], 0xCC0000);
-    expect(c.font.family, 'DejaVu Sans Mono');
-    expect(c.font.fallback, ['Noto Sans Mono CJK SC', 'WenQuanYi Zen Hei Mono', 'monospace']);
+    expect(c.font.family, PlatformFontDefaults.primaryFamily);
+    expect(c.font.fallback, PlatformFontDefaults.fallbackFamilies);
     expect(c.font.size, 14.0);
     expect(c.font.lineHeight, 1.2);
     expect(c.cursor.blinkInterval, 530);
@@ -152,7 +153,7 @@ double_click_threshold = 400
     test('missing sections fall back to defaults', () {
       final c = TerminalConfig.fromTomlString('[font]\nsize = 22.0\n');
       expect(c.font.size, 22.0);
-      expect(c.font.family, 'DejaVu Sans Mono');     // default
+      expect(c.font.family, PlatformFontDefaults.primaryFamily); // default
       expect(c.colors.background, 0x181818);         // default
       expect(c.cursor.blinkInterval, 530);           // default
     });

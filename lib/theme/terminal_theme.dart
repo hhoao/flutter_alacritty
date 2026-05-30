@@ -11,6 +11,8 @@ library;
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/painting.dart' show TextStyle;
 
+import '../config/platform_font_defaults.dart';
+
 /// All colors a [TerminalView] needs to paint a frame and the bell overlay.
 ///
 /// Sliced from [TerminalConfig.colors] + [TerminalConfig.bell.color] without
@@ -84,15 +86,22 @@ class TerminalTheme {
 /// Font-family + sizing slice. The view derives its measured [TextStyle] from
 /// this; bold/italic/boldItalic land in 2O-b.
 class TerminalStyle {
-  const TerminalStyle({
-    this.family = 'monospace',
-    this.fallback = const <String>[],
+  TerminalStyle({
+    String? family,
+    List<String>? fallback,
     this.size = 14.0,
     this.lineHeight = 1.0,
     this.boldFamily,
     this.italicFamily,
     this.boldItalicFamily,
-  });
+  })  : family = family ?? PlatformFontDefaults.primaryFamily,
+        fallback = fallback ?? PlatformFontDefaults.fallbackFamilies;
+
+  /// VS Code-aligned platform defaults (same as [TerminalConfig.defaults] font).
+  factory TerminalStyle.defaults() => TerminalStyle(
+        family: PlatformFontDefaults.primaryFamily,
+        fallback: PlatformFontDefaults.fallbackFamilies,
+      );
 
   final String family;
   final List<String> fallback;

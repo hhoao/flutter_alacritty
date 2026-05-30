@@ -6,6 +6,7 @@ import 'package:toml/toml.dart';
 import '../src/rust/engine.dart' show EngineConfig;
 import '../theme/terminal_theme.dart';
 import 'color_parse.dart';
+import 'platform_font_defaults.dart';
 
 /// Foreground/background/selection (packed 0x00RRGGBB) + the 16 ANSI colors.
 /// Opaque fg/bg pairs passed to the terminal painter for search highlights.
@@ -374,9 +375,10 @@ class TerminalConfig {
   final SelectionConfig selection;
   final TerminalBehaviorConfig terminal;
 
-  /// The v1 look-and-feel, verbatim.
-  factory TerminalConfig.defaults() => const TerminalConfig(
-        colors: TerminalColors(
+  /// Stock look-and-feel. Font family/fallback follow VS Code editor defaults
+  /// per platform (see [PlatformFontDefaults]).
+  factory TerminalConfig.defaults() => TerminalConfig(
+        colors: const TerminalColors(
           background: 0x181818,
           foreground: 0xD8D8D8,
           selection: 0x3A6EA5,
@@ -394,23 +396,23 @@ class TerminalConfig {
           cursorBody: null,
         ),
         font: FontConfig(
-          family: 'DejaVu Sans Mono',
-          fallback: ['Noto Sans Mono CJK SC', 'WenQuanYi Zen Hei Mono', 'monospace'],
+          family: PlatformFontDefaults.primaryFamily,
+          fallback: PlatformFontDefaults.fallbackFamilies,
           size: 14.0,
           lineHeight: 1.2,
         ),
-        cursor: CursorConfig(blinkInterval: 530),
-        scrolling: ScrollConfig(history: 10000, multiplier: 3),
-        mouse: MouseConfig(doubleClickThreshold: 300),
-        bell: BellConfig(color: 0xFFFFFF, duration: 0, animation: 'linear'),
-        ime: ImeConfig(preeditBg: 0x282828, preeditFg: 0xD8D8D8, underline: true),
-        shell: ShellConfig(),
-        keyboard: KeyboardConfig(),
-        window: WindowConfig(),
-        selection: SelectionConfig(
+        cursor: const CursorConfig(blinkInterval: 530),
+        scrolling: const ScrollConfig(history: 10000, multiplier: 3),
+        mouse: const MouseConfig(doubleClickThreshold: 300),
+        bell: const BellConfig(color: 0xFFFFFF, duration: 0, animation: 'linear'),
+        ime: const ImeConfig(preeditBg: 0x282828, preeditFg: 0xD8D8D8, underline: true),
+        shell: const ShellConfig(),
+        keyboard: const KeyboardConfig(),
+        window: const WindowConfig(),
+        selection: const SelectionConfig(
           semanticEscapeChars: ',│`|:"\' ()[]{}<>\t',
         ),
-        terminal: TerminalBehaviorConfig(),
+        terminal: const TerminalBehaviorConfig(),
       );
 
   TerminalConfig copyWith({
