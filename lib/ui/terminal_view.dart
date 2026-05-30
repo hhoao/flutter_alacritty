@@ -837,14 +837,13 @@ class TerminalViewState extends State<TerminalView>
     if (e.kind != PointerDeviceKind.mouse) return;
     _focus.requestFocus();
     final hw = HardwareKeyboard.instance;
-    // Ctrl + left-click on a hyperlink cell → host launches URI.
-    if (hw.isControlPressed && e.buttons & kPrimaryButton != 0) {
+    // Ctrl/Cmd + left-click on a hyperlink cell → host launches URI.
+    if ((hw.isControlPressed || hw.isMetaPressed) &&
+        e.buttons & kPrimaryButton != 0) {
       final (r, c, _) = _cellAt(e.localPosition);
       final uri = _engine.hyperlinkAt(r, c);
       if (uri != null) {
-        if (widget.onLinkActivate != null) {
-          widget.onLinkActivate!(uri);
-        }
+        widget.onLinkActivate?.call(uri);
         return;
       }
     }
