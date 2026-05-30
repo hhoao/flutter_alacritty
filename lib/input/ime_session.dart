@@ -1,3 +1,5 @@
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/services.dart';
 
 /// Owns the platform TextInput connection for the terminal view. Parses
@@ -28,15 +30,20 @@ class ImeSession implements TextInputClient {
   /// Open a platform TextInput session. Idempotent.
   void attach() {
     if (isAttached) return;
+    // Provide the viewId so the platform text input plugin can associate
+    // the client with the correct FlutterView. Without this, TextInput.setClient
+    // fails with "view ID is null" on Windows. (Same fix as AppFlowy #1126.)
+    final viewId = PlatformDispatcher.instance.views.firstOrNull?.viewId;
     _conn = TextInput.attach(
       this,
-      const TextInputConfiguration(
+      TextInputConfiguration(
         inputType: TextInputType.text,
         inputAction: TextInputAction.none,
         autocorrect: false,
         enableSuggestions: false,
         smartDashesType: SmartDashesType.disabled,
         smartQuotesType: SmartQuotesType.disabled,
+        viewId: viewId,
       ),
     );
     _conn!.setEditingState(TextEditingValue.empty);
