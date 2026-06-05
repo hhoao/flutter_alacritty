@@ -235,6 +235,10 @@ class TerminalEngine {
   void reconfigure(TerminalConfig config) {
     _ensureBound();
     _binding!.reconfigure(config.engineConfig);
+    // A palette change can enqueue a PtyWrite (OSC 997 color-scheme report, for
+    // programs subscribed via mode 2031). Flush it now so a live theme toggle
+    // reaches an otherwise-idle TUI immediately instead of waiting for output.
+    _client!.pumpEventsNow();
     _client!.refreshView();
   }
 
