@@ -1083,6 +1083,13 @@ class TerminalViewState extends State<TerminalView>
     );
   }
 
+  /// Returns keyboard focus to this terminal (e.g. after a context menu closes).
+  void requestTerminalFocus() {
+    if (!_focus.hasFocus) {
+      _focus.requestFocus();
+    }
+  }
+
   // Forwarders: extension methods in [terminal_view_pointer.dart] are not
   // resolved as instance members for private-name references in this class.
   void _onPointerDown(PointerDownEvent e) => __pointerOnDown(e);
