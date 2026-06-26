@@ -171,11 +171,19 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
   Uint16List _overFlags = Uint16List(0);
   Uint32List _overHyperlinkId = Uint32List(0);
   bool _repaintNotifyScheduled = false;
+  bool _repaintDisposed = false;
+
+  @override
+  void dispose() {
+    _repaintDisposed = true;
+    super.dispose();
+  }
 
   /// Notifies repaint listeners. Deferred to post-frame when called from layout
   /// (e.g. synchronous viewport apply inside [LayoutBuilder]) so dependents
   /// like [TerminalHistoryScrollbar] do not setState during build.
   void _notifyRepaint() {
+    if (_repaintDisposed) return;
     try {
       final phase = SchedulerBinding.instance.schedulerPhase;
       if (phase == SchedulerPhase.persistentCallbacks ||
@@ -184,6 +192,7 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
         _repaintNotifyScheduled = true;
         SchedulerBinding.instance.addPostFrameCallback((_) {
           _repaintNotifyScheduled = false;
+          if (_repaintDisposed) return;
           notifyListeners();
         });
         return;
@@ -191,6 +200,7 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     } on Object {
       // No scheduler binding (headless unit tests) — notify synchronously.
     }
+    if (_repaintDisposed) return;
     notifyListeners();
   }
 

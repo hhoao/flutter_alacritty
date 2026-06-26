@@ -353,4 +353,10 @@ void main() {
     expect(g.scrollFraction, 0.25);
     expect(g.codepointAt(-1, 0), 'O'.codeUnitAt(0));
   });
+
+  test('dispose suppresses repaint notify', () {
+    final grid = MirrorGrid()..initializeEmpty(1, 1);
+    grid.dispose();
+    expect(() => grid.initializeEmpty(1, 1), returnsNormally);
+  });
 }

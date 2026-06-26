@@ -200,13 +200,14 @@ class TerminalEngine {
   /// Cell-grid resize. This is the authoritative size source: it creates the
   /// native binding on first call and then replays anything that arrived early.
   void resize({required int columns, required int rows}) {
+    if (_disposed) return;
     _bindWithSize(columns: columns, rows: rows);
     // Coalesce no-op repeats (same dims) — a resize to the current size still
     // triggers a full FFI reflow + snapshot otherwise.
     if (columns == _lastColumns && rows == _lastRows) return;
     _lastColumns = columns;
     _lastRows = rows;
-    _client!.resize(columns, rows);
+    _client?.resize(columns, rows);
   }
 
   /// View → engine (keystrokes, paste bytes, mouse reports). Bytes appear on
@@ -426,8 +427,10 @@ class TerminalEngine {
   /// Initialize the mirror grid to an empty viewport. Useful at startup so the
   /// first paint pass doesn't show a stale grid before the first damage
   /// arrives. The mirror is then resized on the first `apply`.
-  void initializeEmpty(int rows, int columns) =>
-      _grid.initializeEmpty(rows, columns);
+  void initializeEmpty(int rows, int columns) {
+    if (_disposed) return;
+    _grid.initializeEmpty(rows, columns);
+  }
 
   /// Awaits pending PTY batches. Use in tests before reading [grid].
   @visibleForTesting
@@ -465,7 +468,7 @@ class TerminalEngine {
   /// clamps to the VT minimum, so even a degenerate request is made safe at the
   /// single boundary where dimensions become geometry.
   void _bindWithSize({required int columns, required int rows}) {
-    if (_client != null) return;
+    if (_disposed || _client != null) return;
     final binding = _engineFactory(
       columns: columns,
       rows: rows,
