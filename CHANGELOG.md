@@ -1,3 +1,16 @@
+## 2.2.0
+
+- Resize v2: single viewport authority, atomic engine+PTY resize, unified scroll
+  input with TUI line batching.
+- Scrollback: proportional history scrollbar, incremental refresh, edge snap,
+  and stabilized wheel/pan/scrollbar races.
+- Rendering: GPU glyph atlas, bounded incremental growth, background opacity,
+  and incremental scroll-only damage paths.
+- Links: `TerminalLinkProvider` seam, overlay decoration/hover/click,
+  `primaryTapActivatesLink`, OSC 8–only mode (no default URL regex scan).
+- Example app updates and benchmark/visual test tagging via `dart_test.yaml`.
+- Requires `rust_lib_flutter_alacritty` **0.2.0**.
+
 ## 2.1.0
 
 - **Breaking:** `TerminalView.linkProviders` now defaults to `const []` (no
