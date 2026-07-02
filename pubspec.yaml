@@ -22,6 +22,7 @@ dependencies:
   toml: ^0.18.0
   url_launcher: ^6.3.2
   desktop_drop: ^0.7.1
+  path_provider: ^2.1.5
 
 dependency_overrides:
   rust_lib_flutter_alacritty:

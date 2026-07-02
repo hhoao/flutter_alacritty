@@ -7,6 +7,11 @@
   (local `cargo` → signed download fallback).
 - Add `cargokit_options.yaml.example` for forcing precompiled binaries in CI.
 
+- **Android (experimental):** local PTY via `FlutterPtyBackend` — default
+  `/system/bin/sh`, app-private `HOME`/cwd through [`ShellDefaults.install`],
+  and `path_provider` in the demo `main()`. Override with [`ShellConfig`];
+  see `docs/library-api.md`.
+
 ## 2.2.0
 
 - Resize v2: single viewport authority, atomic engine+PTY resize, unified scroll
