@@ -1,3 +1,12 @@
+## 2.2.1
+
+- **Rust optional for consumers:** `rust_lib_flutter_alacritty` 0.2.1 ships
+  Cargokit precompiled binaries (signed GitHub releases). No local Rust needed
+  for `flutter build` when artifacts exist for your platform/crate hash.
+- New public test helper: `package:flutter_alacritty/testing/rust_lib_loader.dart`
+  (local `cargo` → signed download fallback).
+- Add `cargokit_options.yaml.example` for forcing precompiled binaries in CI.
+
 ## 2.2.0
 
 - Resize v2: single viewport authority, atomic engine+PTY resize, unified scroll

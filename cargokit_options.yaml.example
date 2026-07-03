@@ -1,0 +1,7 @@
+# Optional Cargokit settings for apps using flutter_alacritty.
+#
+# Copy to your app root as `cargokit_options.yaml`.
+#
+# When Rustup is installed, Cargokit builds from source by default. Set this to
+# true to always download signed precompiled binaries (faster CI, no Rust needed).
+use_precompiled_binaries: true

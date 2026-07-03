@@ -27,17 +27,19 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 - Flutter 3.3+
 - Dart 3.11+
-- Rust toolchain (for building the native engine from source)
 - Linux, macOS, or Windows desktop
+- **Rust toolchain** — optional for app builds; required only when hacking the
+  engine or when precompiled binaries are unavailable for your platform/hash.
+  See [packages/rust_lib_flutter_alacritty/docs/PRECOMPILED_BINARIES.md](packages/rust_lib_flutter_alacritty/docs/PRECOMPILED_BINARIES.md).
 
 ## Use as a dependency
 
 ```yaml
 dependencies:
-  flutter_alacritty: ^2.2.0
+  flutter_alacritty: ^2.2.1
 ```
 
-Requires [`rust_lib_flutter_alacritty`](https://pub.dev/packages/rust_lib_flutter_alacritty) **0.2.0** or newer (pulled in automatically).
+Requires [`rust_lib_flutter_alacritty`](https://pub.dev/packages/rust_lib_flutter_alacritty) **0.2.1** or newer (pulled in automatically).
 
 ## Use as a library
 

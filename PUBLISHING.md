@@ -84,3 +84,8 @@ dart pub get && dart pub publish --dry-run && dart pub publish
 - [ ] `flutter test` and `flutter analyze lib test` pass
 - [ ] Versions + `CHANGELOG.md` updated in both repos
 - [ ] `rust_lib` published before `flutter_alacritty`
+- [ ] **Precompiled binaries:** push Rust changes to `rust_lib_flutter_alacritty`
+      `main` and wait for
+      [precompile-binaries](https://github.com/hhoao/rust_lib_flutter_alacritty/actions)
+      CI before publishing (consumers without Rust need the matching GitHub
+      release). See `packages/rust_lib_flutter_alacritty/docs/PRECOMPILED_BINARIES.md`.
