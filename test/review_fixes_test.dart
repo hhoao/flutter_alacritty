@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_alacritty/config/terminal_config.dart';
@@ -25,6 +26,9 @@ class _FakePty implements PtyBackend {
   void resize(int rows, int columns) {}
   @override
   void kill() {}
+  // Explicit null: `implements` does not inherit abstract-class defaults.
+  @override
+  ValueListenable<bool>? get isForegroundProcessRunning => null;
 }
 
 void main() {

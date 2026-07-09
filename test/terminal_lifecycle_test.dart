@@ -33,6 +33,9 @@ class _FakePty implements PtyBackend {
   void resize(int rows, int columns) {}
   @override
   void kill() => killed = true;
+  // Explicit null: `implements` does not inherit abstract-class defaults.
+  @override
+  ValueListenable<bool>? get isForegroundProcessRunning => null;
 }
 
 void main() {

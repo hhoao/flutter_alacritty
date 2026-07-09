@@ -16,7 +16,10 @@ dependencies:
     sdk: flutter
   flutter_rust_bridge: ^2.12.0
   rust_lib_flutter_alacritty: ^0.2.1
-  flutter_pty: ^0.4.0
+  # WIP: path dep for foreground-process API; switch back to a version
+  # constraint after flutter_pty publishes the new getters.
+  flutter_pty:
+    path: /home/hhoa/git/hhoa/flutter_pty/.worktrees/flutter-pty-optimization
   freezed_annotation: ^3.0.0
   path: ^1.9.0
   toml: ^0.18.0

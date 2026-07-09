@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+
 /// A source/sink of terminal bytes. flutter_pty is the v1 implementation;
 /// the interface lets us swap to a forked PTY, a dart:ffi PTY, or a remote
 /// (SSH) source later without touching the engine.
@@ -18,4 +20,12 @@ abstract class PtyBackend {
 
   /// Terminate the child and release resources.
   void kill();
+
+  /// `null` when the backend cannot determine foreground state (e.g. Windows,
+  /// remote/SSH backends, or fakes). Hosts should treat null as "unknown".
+  ///
+  /// Classes that `implement PtyBackend` must declare this getter explicitly
+  /// (Dart does not inherit concrete members via `implements`); return `null`
+  /// unless the backend can report foreground state.
+  ValueListenable<bool>? get isForegroundProcessRunning => null;
 }

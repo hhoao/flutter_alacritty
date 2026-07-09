@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 
 import '../config/terminal_config.dart';
@@ -166,9 +168,31 @@ class FlutterPtyBackend implements PtyBackend {
           rows: rows,
           workingDirectory: spec.workingDirectory,
           environment: spec.environment,
-        );
+        ),
+        _foregroundRunning = ValueNotifier(false) {
+    _startWatching();
+  }
 
   final Pty _pty;
+  final ValueNotifier<bool> _foregroundRunning;
+  StreamSubscription<bool>? _foregroundSub;
+  bool _disposed = false;
+
+  void _startWatching() {
+    _foregroundSub = _pty.foregroundProcessRunningChanges().listen((running) {
+      if (!_disposed) _foregroundRunning.value = running;
+    });
+    // Stop polling after the shell exits naturally.
+    unawaited(_pty.exitCode.then((_) => _disposeForegroundWatch()));
+  }
+
+  void _disposeForegroundWatch() {
+    if (_disposed) return;
+    _disposed = true;
+    unawaited(_foregroundSub?.cancel());
+    _foregroundSub = null;
+    _foregroundRunning.dispose();
+  }
 
   @override
   Stream<Uint8List> get output => _pty.output;
@@ -177,11 +201,18 @@ class FlutterPtyBackend implements PtyBackend {
   Future<int> get exitCode => _pty.exitCode;
 
   @override
+  ValueListenable<bool>? get isForegroundProcessRunning =>
+      _disposed ? null : _foregroundRunning;
+
+  @override
   void write(Uint8List data) => _pty.write(data);
 
   @override
   void resize(int rows, int columns) => _pty.resize(rows, columns);
 
   @override
-  void kill() => _pty.kill();
+  void kill() {
+    _disposeForegroundWatch();
+    _pty.kill();
+  }
 }

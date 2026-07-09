@@ -451,8 +451,7 @@ working_directory = "/storage/emulated/0/Download"
 
 Implement `PtyBackend` for your transport. The engine doesn't care where bytes
 come from — it just needs a `Stream<Uint8List>` in and a `void write(Uint8List)`
-out, plus `resize(rows, columns)` and `kill()` for lifecycle. The five-method
-interface:
+out, plus `resize(rows, columns)` and `kill()` for lifecycle. The interface:
 
 ```dart
 abstract class PtyBackend {
@@ -461,6 +460,9 @@ abstract class PtyBackend {
   void write(Uint8List data);
   void resize(int rows, int columns);
   void kill();
+
+  /// `null` when unknown (Windows, SSH, fakes).
+  ValueListenable<bool>? get isForegroundProcessRunning => null;
 }
 ```
 
@@ -468,6 +470,25 @@ abstract class PtyBackend {
 Swapping in an SSH backend means returning bytes from the channel's stdout on
 `output` and writing to its stdin on `write` — the engine stays unchanged.
 See Plan 2S (TODO) for the upstream SSH/Mosh integration roadmap.
+
+## Foreground process running (tab progress)
+
+Hosts that want a tab loading indicator can listen to
+`PtyBackend.isForegroundProcessRunning`. On Unix/Android,
+`FlutterPtyBackend` exposes a non-null `ValueListenable<bool>` updated from
+`flutter_pty`'s poll stream. On Windows (and for remote/SSH backends that do
+not override the getter) the value is `null` — treat that as "unknown" and
+skip the indicator.
+
+```dart
+final listenable = pty.isForegroundProcessRunning;
+if (listenable != null) {
+  return ValueListenableBuilder<bool>(
+    valueListenable: listenable,
+    builder: (_, running, __) => /* tab progress */,
+  );
+}
+```
 
 ## Scroll input architecture
 
