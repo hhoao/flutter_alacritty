@@ -153,6 +153,17 @@ String? _firstExistingExecutable(Iterable<String> candidates) {
   return null;
 }
 
+/// Whether [FlutterPtyBackend] should expose a foreground listenable.
+///
+/// Windows and platforms that return `null` from the underlying PTY skip
+/// polling so hosts see `null` rather than a stuck `false` notifier.
+@visibleForTesting
+bool shouldWatchForegroundProcess({
+  required bool isWindows,
+  required bool? initialForegroundRunning,
+}) =>
+    !isWindows && initialForegroundRunning != null;
+
 class FlutterPtyBackend implements PtyBackend {
   FlutterPtyBackend({
     int rows = 24,
@@ -168,19 +179,29 @@ class FlutterPtyBackend implements PtyBackend {
           rows: rows,
           workingDirectory: spec.workingDirectory,
           environment: spec.environment,
-        ),
-        _foregroundRunning = ValueNotifier(false) {
-    _startWatching();
+        ) {
+    final initial = _pty.isForegroundProcessRunning;
+    if (shouldWatchForegroundProcess(
+      isWindows: Platform.isWindows,
+      initialForegroundRunning: initial,
+    )) {
+      _foregroundRunning = ValueNotifier<bool>(initial!);
+      _startWatching();
+    } else {
+      _foregroundRunning = null;
+    }
   }
 
   final Pty _pty;
-  final ValueNotifier<bool> _foregroundRunning;
+  late final ValueNotifier<bool>? _foregroundRunning;
   StreamSubscription<bool>? _foregroundSub;
   bool _disposed = false;
 
   void _startWatching() {
+    final notifier = _foregroundRunning;
+    if (notifier == null) return;
     _foregroundSub = _pty.foregroundProcessRunningChanges().listen((running) {
-      if (!_disposed) _foregroundRunning.value = running;
+      if (!_disposed) notifier.value = running;
     });
     // Stop polling after the shell exits naturally.
     unawaited(_pty.exitCode.then((_) => _disposeForegroundWatch()));
@@ -189,9 +210,14 @@ class FlutterPtyBackend implements PtyBackend {
   void _disposeForegroundWatch() {
     if (_disposed) return;
     _disposed = true;
-    unawaited(_foregroundSub?.cancel());
+    final sub = _foregroundSub;
     _foregroundSub = null;
-    _foregroundRunning.dispose();
+    if (sub != null) unawaited(sub.cancel());
+    final n = _foregroundRunning;
+    if (n != null) {
+      n.value = false; // notify hosts before dispose
+      n.dispose();
+    }
   }
 
   @override
@@ -216,3 +242,4 @@ class FlutterPtyBackend implements PtyBackend {
     _pty.kill();
   }
 }
+

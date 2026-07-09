@@ -478,7 +478,8 @@ Hosts that want a tab loading indicator can listen to
 `FlutterPtyBackend` exposes a non-null `ValueListenable<bool>` updated from
 `flutter_pty`'s poll stream. On Windows (and for remote/SSH backends that do
 not override the getter) the value is `null` — treat that as "unknown" and
-skip the indicator.
+skip the indicator. Polling is not started when the platform cannot report
+foreground state.
 
 ```dart
 final listenable = pty.isForegroundProcessRunning;
@@ -489,6 +490,11 @@ if (listenable != null) {
   );
 }
 ```
+
+Do **not** retain the listenable past session teardown. On `kill()` / shell
+exit the backend sets the value to `false` (notifying listeners) then
+disposes the notifier and the getter returns `null`. Rebuild when the PTY
+instance is replaced (e.g. after restart).
 
 ## Scroll input architecture
 
