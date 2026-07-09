@@ -144,7 +144,7 @@ void main() {
     try {
       pty = FlutterPtyBackend(rows: 24, columns: 80);
     } on ArgumentError catch (e) {
-      // Unit-test VM often lacks libflutter_pty.so (plugin dylib).
+      // Unit-test VM often lacks libflutter_pty_new.so (plugin dylib).
       // ignore: avoid_print
       print('skip FlutterPtyBackend spawn: $e');
       return;
