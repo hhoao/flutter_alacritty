@@ -243,13 +243,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "6.0.0"
-  flutter_pty:
+  flutter_pty_new:
     dependency: "direct main"
     description:
       path: "/home/hhoa/git/hhoa/flutter_pty/.worktrees/flutter-pty-optimization"
       relative: false
     source: path
-    version: "0.4.3"
+    version: "1.0.0"
   flutter_rust_bridge:
     dependency: "direct main"
     description:

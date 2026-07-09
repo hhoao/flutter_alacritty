@@ -1,7 +1,7 @@
 name: flutter_alacritty
 description: >-
   Flutter terminal widget powered by an Alacritty-based Rust engine
-  (flutter_rust_bridge + flutter_pty).
+  (flutter_rust_bridge + flutter_pty_new).
 version: 2.2.1
 repository: https://github.com/hhoao/flutter_alacritty
 issue_tracker: https://github.com/hhoao/flutter_alacritty/issues
@@ -16,10 +16,7 @@ dependencies:
     sdk: flutter
   flutter_rust_bridge: ^2.12.0
   rust_lib_flutter_alacritty: ^0.2.1
-  # WIP: path dep for foreground-process API; switch back to a version
-  # constraint after flutter_pty publishes the new getters.
-  flutter_pty:
-    path: /home/hhoa/git/hhoa/flutter_pty/.worktrees/flutter-pty-optimization
+  flutter_pty_new: ^1.0.0
   freezed_annotation: ^3.0.0
   path: ^1.9.0
   toml: ^0.18.0
@@ -30,6 +27,8 @@ dependencies:
 dependency_overrides:
   rust_lib_flutter_alacritty:
     path: packages/rust_lib_flutter_alacritty
+  flutter_pty_new:
+    path: /home/hhoa/git/hhoa/flutter_pty/.worktrees/flutter-pty-optimization
 
 dev_dependencies:
   flutter_test:

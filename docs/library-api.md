@@ -410,7 +410,7 @@ parameters without starting a process.
 
 **Platform defaults (internal — no separate API):** when `program` and
 `working_directory` are unset, `resolveShellSpec` applies sensible per-OS
-behavior before `FlutterPtyBackend` calls `package:flutter_pty`:
+behavior before `FlutterPtyBackend` calls `package:flutter_pty_new`:
 
 - **Linux / macOS** — `$SHELL` or `/bin/bash`; cwd left unset (shell default).
 - **Windows** — `cmd.exe`.
@@ -466,7 +466,7 @@ abstract class PtyBackend {
 }
 ```
 
-`FlutterPtyBackend` (the v1 implementation) wraps `package:flutter_pty`.
+`FlutterPtyBackend` (the v1 implementation) wraps `package:flutter_pty_new`.
 Swapping in an SSH backend means returning bytes from the channel's stdout on
 `output` and writing to its stdin on `write` — the engine stays unchanged.
 See Plan 2S (TODO) for the upstream SSH/Mosh integration roadmap.
@@ -476,7 +476,7 @@ See Plan 2S (TODO) for the upstream SSH/Mosh integration roadmap.
 Hosts that want a tab loading indicator can listen to
 `PtyBackend.isForegroundProcessRunning`. On Unix/Android,
 `FlutterPtyBackend` exposes a non-null `ValueListenable<bool>` updated from
-`flutter_pty`'s poll stream. On Windows (and for remote/SSH backends that do
+`flutter_pty_new`'s poll stream. On Windows (and for remote/SSH backends that do
 not override the getter) the value is `null` — treat that as "unknown" and
 skip the indicator. Polling is not started when the platform cannot report
 foreground state.
