@@ -1,3 +1,14 @@
+## 2.3.0
+
+- **Foreground process state:** `PtyBackend.isForegroundProcessRunning` exposes
+  an optional `ValueListenable<bool>` for tab loading indicators while a
+  foreground command runs ([#1](https://github.com/hhoao/flutter_alacritty/issues/1)).
+  `FlutterPtyBackend` implements it on Unix/Android; Windows returns `null`.
+- Depend on [`flutter_pty_new`](https://pub.dev/packages/flutter_pty_new) `^1.0.0`
+  instead of `flutter_pty`.
+- Publish CI verifies `flutter_pty_new` exists on pub.dev before publishing
+  (release order: `rust_lib` → `flutter_pty_new` → `flutter_alacritty`).
+
 ## 2.2.1
 
 - **Rust optional for consumers:** `rust_lib_flutter_alacritty` 0.2.1 ships

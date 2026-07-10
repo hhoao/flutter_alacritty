@@ -246,9 +246,10 @@ packages:
   flutter_pty_new:
     dependency: "direct main"
     description:
-      path: "/home/hhoa/git/hhoa/flutter_pty/.worktrees/flutter-pty-optimization"
-      relative: false
-    source: path
+      name: flutter_pty_new
+      sha256: "8894d9e7b4e85af5d6c080bc18d14956a0023e8394f96e81e8ab5c3528e7a0c2"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
     version: "1.0.0"
   flutter_rust_bridge:
     dependency: "direct main"
