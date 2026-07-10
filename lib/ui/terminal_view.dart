@@ -47,8 +47,6 @@ part 'terminal_view_pointer.dart';
 const double _kFlingDecelerationTouch = 0.998;
 // Tighter than GNOME's 0.997 — trackpad coast felt too long for terminal text.
 const double _kFlingDecelerationTouchpad = 0.995;
-const double _kFlingStartVelocity = 80.0;
-const double _kFlingStopVelocity = 18.0;
 // Trailing window over which a trackpad gesture's release velocity is averaged,
 // matching swipeTracker.js EVENT_HISTORY_THRESHOLD_MS.
 const int _kVelocityWindowMs = 150;

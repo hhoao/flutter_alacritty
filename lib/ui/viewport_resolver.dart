@@ -1,5 +1,3 @@
-import 'package:flutter/painting.dart';
-
 import 'terminal_viewport.dart';
 import 'viewport_geometry.dart';
 

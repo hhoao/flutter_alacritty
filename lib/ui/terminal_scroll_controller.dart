@@ -462,7 +462,6 @@ class TerminalScrollController {
     onPanDelta(dyPx: _flingVelocity * dtMs / 1000.0, shiftHeld: _flingShiftHeld);
   }
 
-  @visibleForTesting
   bool get isFlinging => _flingTicker != null;
 
   @visibleForTesting
