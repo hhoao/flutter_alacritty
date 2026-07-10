@@ -72,27 +72,8 @@ jobs:
             exit 1
           fi
 
-      - name: Strip local path dependency_overrides for pub.dev
-        run: |
-          python3 <<'PY'
-          import pathlib
-
-          path = pathlib.Path("pubspec.yaml")
-          lines = path.read_text().splitlines(keepends=True)
-          out: list[str] = []
-          skip = False
-          for line in lines:
-              if line.startswith("dependency_overrides:"):
-                  skip = True
-                  continue
-              if skip:
-                  if line and not line.startswith((" ", "\t")):
-                      skip = False
-                      out.append(line)
-                  continue
-              out.append(line)
-          path.write_text("".join(out))
-          PY
+      - name: Remove local pubspec_overrides for pub.dev
+        run: rm -f pubspec_overrides.yaml
 
       - name: Install dependencies
         run: dart pub get

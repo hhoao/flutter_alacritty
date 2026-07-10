@@ -1,0 +1,4 @@
+# Local-only overrides (not published). CI deletes this file before pub publish.
+dependency_overrides:
+  rust_lib_flutter_alacritty:
+    path: packages/rust_lib_flutter_alacritty

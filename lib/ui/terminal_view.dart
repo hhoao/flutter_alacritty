@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart'
     show
         HardwareKeyboard,
@@ -25,7 +24,6 @@ import '../input/paste.dart';
 import '../input/term_mode.dart';
 import '../links/link_overlay.dart';
 import '../links/terminal_link_provider.dart';
-import '../links/url_link_provider.dart';
 import '../render/cell_flags.dart';
 import '../render/cell_metrics.dart';
 import 'terminal_viewport.dart';
