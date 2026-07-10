@@ -1,3 +1,9 @@
+## 2.3.1
+
+- Fix pub.dev publish dry-run: move local `rust_lib` path override to
+  `pubspec_overrides.yaml`, remove unused analyze warnings, and stop mutating
+  `pubspec.yaml` in CI before publish.
+
 ## 2.3.0
 
 - **Foreground process state:** `PtyBackend.isForegroundProcessRunning` exposes

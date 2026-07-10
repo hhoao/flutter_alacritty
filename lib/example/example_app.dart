@@ -12,7 +12,6 @@ import '../input/key_bindings.dart';
 import '../input/paste.dart';
 import '../pty/flutter_pty_backend.dart';
 import '../pty/pty_backend.dart';
-import '../render/cell_metrics.dart';
 import '../ui/search_bar.dart';
 import '../ui/terminal_shortcuts.dart';
 import '../links/url_link_provider.dart';
@@ -99,11 +98,6 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   late TerminalConfig _config = widget.config ?? TerminalConfig.defaults();
   late (Map<ShortcutActivator, Intent>, Map<Type, Action<Intent>>) _binds =
       bindingsToShortcuts(_config.keyboard.bindings);
-  // Cell metrics drive the cols/rows the engine is spawned/resized into. We
-  // compute them once here from the textStyle so layoutBuilder→_ensureStarted
-  // and the nested TerminalView agree on sizing (both derive from the same
-  // measured style).
-  late CellMetrics _metrics = _measureMetrics(_config);
   StreamSubscription<TerminalConfig>? _cfgSub;
 
   TerminalEngine? _engine;
@@ -126,9 +120,6 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
       GlobalKey<State<TerminalView>>();
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
-  CellMetrics _measureMetrics(TerminalConfig config) => CellMetrics.measure(
-      config.textStyle.copyWith(fontSize: config.font.size));
-
   @override
   void initState() {
     super.initState();
@@ -143,11 +134,6 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     setState(() {
       _config = next;
       _binds = bindingsToShortcuts(next.keyboard.bindings);
-      if (next.font.family != prev.font.family ||
-          next.font.size != prev.font.size ||
-          next.font.lineHeight != prev.font.lineHeight) {
-        _metrics = _measureMetrics(next);
-      }
     });
     _engine?.reconfigure(next);
     if (next.shell.program != prev.shell.program) {

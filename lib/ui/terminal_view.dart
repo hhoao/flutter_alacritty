@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart'
     show
         HardwareKeyboard,
@@ -25,7 +24,6 @@ import '../input/paste.dart';
 import '../input/term_mode.dart';
 import '../links/link_overlay.dart';
 import '../links/terminal_link_provider.dart';
-import '../links/url_link_provider.dart';
 import '../render/cell_flags.dart';
 import '../render/cell_metrics.dart';
 import 'terminal_viewport.dart';
@@ -49,8 +47,6 @@ part 'terminal_view_pointer.dart';
 const double _kFlingDecelerationTouch = 0.998;
 // Tighter than GNOME's 0.997 — trackpad coast felt too long for terminal text.
 const double _kFlingDecelerationTouchpad = 0.995;
-const double _kFlingStartVelocity = 80.0;
-const double _kFlingStopVelocity = 18.0;
 // Trailing window over which a trackpad gesture's release velocity is averaged,
 // matching swipeTracker.js EVENT_HISTORY_THRESHOLD_MS.
 const int _kVelocityWindowMs = 150;

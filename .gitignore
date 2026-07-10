@@ -4,6 +4,9 @@
 # Local symlink to ../../../opensource path deps (see packages/rust_lib_flutter_alacritty/rust/Cargo.toml)
 opensource/
 
+# Local path overrides for development (not published)
+pubspec_overrides.yaml
+
 # Miscellaneous
 *.class
 *.log
