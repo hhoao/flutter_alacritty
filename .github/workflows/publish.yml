@@ -49,6 +49,30 @@ jobs:
             exit 1
           fi
 
+      - name: Verify flutter_pty_new is on pub.dev
+        run: |
+          set -euo pipefail
+          flutter_pty_new_version=$(
+            python3 -c "
+          import re, pathlib
+          text = pathlib.Path('pubspec.yaml').read_text()
+          m = re.search(
+              r'^\\s*flutter_pty_new:\\s*\\^?([0-9]+\\.[0-9]+\\.[0-9]+)',
+              text,
+              re.M,
+          )
+          if not m:
+              raise SystemExit('flutter_pty_new version not found in pubspec.yaml')
+          print(m.group(1))
+          "
+          )
+          echo "Expecting flutter_pty_new ${flutter_pty_new_version} on pub.dev"
+          if ! curl -fsS "https://pub.dev/api/packages/flutter_pty_new/versions/${flutter_pty_new_version}" >/dev/null; then
+            echo "ERROR: flutter_pty_new ${flutter_pty_new_version} is not on pub.dev yet."
+            echo "Publish and tag flutter_pty_new first, then re-push this tag."
+            exit 1
+          fi
+
       - name: Strip local path dependency_overrides for pub.dev
         run: |
           python3 <<'PY'

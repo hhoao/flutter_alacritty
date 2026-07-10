@@ -390,12 +390,68 @@ If you build a `TerminalConfig` directly, you can also pass it to
 `TerminalEngine` and read `config.theme` / `config.style` to feed
 `TerminalView`. That is what `ExampleTerminalApp` does.
 
+## Shell spawn (`FlutterPtyBackend`)
+
+`FlutterPtyBackend` is the local-PTY implementation of `PtyBackend`. The
+public control surface is [`ShellConfig`](lib/config/terminal_config.dart)
+(on [`TerminalConfig.shell`](lib/config/terminal_config.dart) or in TOML under
+`[shell]`):
+
+| Field | Role |
+| --- | --- |
+| `program` | Shell binary; `null` → platform default (`$SHELL`, `/bin/bash`, `/system/bin/sh`, …) |
+| `args` | argv after the program name |
+| `working_directory` | Spawn cwd; `~` / `~/…` expand against `HOME`; `null` → platform default |
+| `env` | Extra environment entries merged into the PTY child |
+
+[`resolveShellSpec`](lib/pty/flutter_pty_backend.dart) and [`ShellSpec`](lib/pty/flutter_pty_backend.dart)
+are exported so custom `PtyBackend` authors and tests can preview spawn
+parameters without starting a process.
+
+**Platform defaults (internal — no separate API):** when `program` and
+`working_directory` are unset, `resolveShellSpec` applies sensible per-OS
+behavior before `FlutterPtyBackend` calls `package:flutter_pty_new`:
+
+- **Linux / macOS** — `$SHELL` or `/bin/bash`; cwd left unset (shell default).
+- **Windows** — `cmd.exe`.
+- **Android (experimental)** — first existing POSIX shell (`/system/bin/sh`, …);
+  when `HOME` is missing or `/`, set `HOME` and default cwd to the app-private
+  files directory. Call [`ShellDefaults.install`](lib/pty/shell_defaults.dart)
+  from `main()` with `path_provider` (release builds block `/proc` reads):
+
+```dart
+if (Platform.isAndroid) {
+  final dir = await getApplicationSupportDirectory();
+  ShellDefaults.install(mobileHome: dir.path);
+}
+```
+
+  Desktop paths like `/home/…` do not exist on Android.
+
+To use Downloads, external storage, or Termux, the **host app** resolves the
+path (e.g. `path_provider`) and passes it explicitly:
+
+```dart
+FlutterPtyBackend(
+  shell: ShellConfig(
+    workingDirectory: documentsPath,
+    env: {'HOME': documentsPath},
+  ),
+)
+```
+
+Or in TOML:
+
+```toml
+[shell]
+working_directory = "/storage/emulated/0/Download"
+```
+
 ## Wiring SSH / remote PTY
 
 Implement `PtyBackend` for your transport. The engine doesn't care where bytes
 come from — it just needs a `Stream<Uint8List>` in and a `void write(Uint8List)`
-out, plus `resize(rows, columns)` and `kill()` for lifecycle. The five-method
-interface:
+out, plus `resize(rows, columns)` and `kill()` for lifecycle. The interface:
 
 ```dart
 abstract class PtyBackend {
@@ -404,13 +460,41 @@ abstract class PtyBackend {
   void write(Uint8List data);
   void resize(int rows, int columns);
   void kill();
+
+  /// `null` when unknown (Windows, SSH, fakes).
+  ValueListenable<bool>? get isForegroundProcessRunning => null;
 }
 ```
 
-`FlutterPtyBackend` (the v1 implementation) wraps `package:flutter_pty`.
+`FlutterPtyBackend` (the v1 implementation) wraps `package:flutter_pty_new`.
 Swapping in an SSH backend means returning bytes from the channel's stdout on
 `output` and writing to its stdin on `write` — the engine stays unchanged.
 See Plan 2S (TODO) for the upstream SSH/Mosh integration roadmap.
+
+## Foreground process running (tab progress)
+
+Hosts that want a tab loading indicator can listen to
+`PtyBackend.isForegroundProcessRunning`. On Unix/Android,
+`FlutterPtyBackend` exposes a non-null `ValueListenable<bool>` updated from
+`flutter_pty_new`'s poll stream. On Windows (and for remote/SSH backends that do
+not override the getter) the value is `null` — treat that as "unknown" and
+skip the indicator. Polling is not started when the platform cannot report
+foreground state.
+
+```dart
+final listenable = pty.isForegroundProcessRunning;
+if (listenable != null) {
+  return ValueListenableBuilder<bool>(
+    valueListenable: listenable,
+    builder: (_, running, __) => /* tab progress */,
+  );
+}
+```
+
+Do **not** retain the listenable past session teardown. On `kill()` / shell
+exit the backend sets the value to `false` (notifying listeners) then
+disposes the notifier and the getter returns `null`. Rebuild when the PTY
+instance is replaced (e.g. after restart).
 
 ## Scroll input architecture
 

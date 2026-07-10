@@ -4,7 +4,7 @@
 [![pub package](https://img.shields.io/pub/v/flutter_alacritty.svg)](https://pub.dev/packages/flutter_alacritty)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Flutter terminal widget powered by an [Alacritty](https://github.com/alacritty/alacritty)-based Rust engine, with PTY support via [`flutter_pty`](https://pub.dev/packages/flutter_pty).
+Flutter terminal widget powered by an [Alacritty](https://github.com/alacritty/alacritty)-based Rust engine, with PTY support via [`flutter_pty_new`](https://pub.dev/packages/flutter_pty_new).
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
