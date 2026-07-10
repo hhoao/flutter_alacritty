@@ -19,7 +19,12 @@ jobs:
     permissions:
       id-token: write # Required for pub.dev OIDC
     steps:
+      # Submodule must be present: an empty gitlink + .pubignore of
+      # packages/rust_lib_flutter_alacritty makes `dart pub publish --dry-run`
+      # fail with "checked-in file is ignored by a .gitignore".
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260
 
