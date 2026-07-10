@@ -1,3 +1,9 @@
+## 2.3.2
+
+- Publish CI checks out the `rust_lib_flutter_alacritty` submodule so
+  `dart pub publish --dry-run` does not treat the empty gitlink as a
+  gitignored tracked path.
+
 ## 2.3.1
 
 - Fix pub.dev publish dry-run: move local `rust_lib` path override to
