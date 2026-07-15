@@ -491,10 +491,13 @@ class TerminalViewState extends State<TerminalView>
     }
   }
 
-  /// Strut multiplier matching the measured cell (may exceed configured
+  /// Strut multiplier matching measured *content* height (may exceed configured
   /// `lineHeight` when CJK fallback metrics need a taller line box — #5).
-  double get _effectiveLineHeight =>
-      _fontSize > 0 ? _metrics.height / _fontSize : widget.textStyle.lineHeight;
+  /// Uses [CellMetrics.contentHeight] so `font.offset` Y grows the cell without
+  /// stretching the strut the same way content growth does.
+  double get _effectiveLineHeight => _fontSize > 0
+      ? _metrics.strutLineHeight(_fontSize)
+      : widget.textStyle.lineHeight;
 
   GlyphCache _newGlyphCache() => GlyphCache(
         fontFamily: widget.textStyle.family,

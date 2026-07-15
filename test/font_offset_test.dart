@@ -15,6 +15,47 @@ void main() {
     expect(grown.height, closeTo(base.height + 4, 0.01));
   });
 
+  // Task 2 regression: offsetY must enlarge the cell but not the strut
+  // multiplier used by GlyphCache / GlyphAtlas (content height only).
+  test('offsetY grows cell height without stretching strut line height', () {
+    const fontSize = 12.0;
+    const style =
+        TextStyle(fontSize: fontSize, height: 1.0, fontFamily: 'monospace');
+    final base = CellMetrics.measure(style);
+    const offsetY = 4.0;
+    final grown = CellMetrics.measure(style, offsetY: offsetY);
+
+    expect(grown.height, closeTo(base.height + offsetY, 0.01));
+    expect(grown.contentHeight, closeTo(base.contentHeight, 0.01));
+    expect(grown.strutLineHeight(fontSize),
+        closeTo(base.strutLineHeight(fontSize), 0.01));
+    // Full cell height / fontSize would incorrectly stretch strut by offsetY.
+    expect(grown.height / fontSize,
+        isNot(closeTo(base.strutLineHeight(fontSize), 0.01)));
+
+    final baseParagraph = GlyphCache(
+      fontFamily: 'monospace',
+      fontSize: fontSize,
+      cellWidth: base.width,
+      lineHeight: base.strutLineHeight(fontSize),
+    ).tryGet('A'.codeUnitAt(0), 0xFFFFFF)!;
+    final contentParagraph = GlyphCache(
+      fontFamily: 'monospace',
+      fontSize: fontSize,
+      cellWidth: grown.width,
+      lineHeight: grown.strutLineHeight(fontSize),
+    ).tryGet('A'.codeUnitAt(0), 0xFFFFFF)!;
+    final stretchedParagraph = GlyphCache(
+      fontFamily: 'monospace',
+      fontSize: fontSize,
+      cellWidth: grown.width,
+      lineHeight: grown.height / fontSize,
+    ).tryGet('A'.codeUnitAt(0), 0xFFFFFF)!;
+
+    expect(contentParagraph.height, closeTo(baseParagraph.height, 0.5));
+    expect(stretchedParagraph.height, greaterThan(baseParagraph.height + 1));
+  });
+
   test('GlyphCache and GlyphAtlas store glyph_offset', () {
     final cache = GlyphCache(
       fontFamily: 'monospace',

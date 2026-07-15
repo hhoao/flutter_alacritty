@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_alacritty/render/cell_flags.dart';
-import 'package:flutter_alacritty/render/cell_metrics.dart';
 import 'package:flutter_alacritty/render/glyph_atlas.dart';
 import 'package:flutter_alacritty/render/glyph_cache.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
@@ -183,7 +182,12 @@ Future<ui.Image> _renderToImage(MirrorGrid grid, String outPath,
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  final hasDejaVu = File(_mono).existsSync();
+
   setUpAll(() async {
+    // Visual oracle needs real system monospace TTFs; skip load when absent so
+    // this file does not block hermetic CI suites that never run --tags visual.
+    if (!hasDejaVu) return;
     await _loadFont('monospace', _mono);
     if (File(_monoBold).existsSync()) await _loadFont('monospace-bold', _monoBold);
     if (File(_cjk).existsSync()) await _loadFont('cjk', _cjk);
@@ -192,6 +196,10 @@ void main() {
   // Fractional DPR (1.25) on top of fractional cell metrics — the exact
   // combination that drifted before anchoring glyphs to integer slot origins.
   test('atlas render matches the paragraph render (rich scene, 1.25x DPR)', () async {
+    if (!hasDejaVu) {
+      markTestSkipped('DejaVuSansMono not installed at $_mono');
+      return;
+    }
     final pImg = await _renderToImage(_scene(_cols, _rows), '/tmp/fa_render_paragraph.png',
         scale: 1.25);
     final aImg = await _renderToImage(_scene(_cols, _rows), '/tmp/fa_render_atlas.png',
@@ -203,6 +211,10 @@ void main() {
   // per column/row, so a garbled render would be obvious here. Guards that the
   // integer-slot anchoring holds at the size of a real terminal screen.
   test('atlas render matches at full-screen 80x24 (drift would compound here)', () async {
+    if (!hasDejaVu) {
+      markTestSkipped('DejaVuSansMono not installed at $_mono');
+      return;
+    }
     final pImg = await _renderToImage(_denseScene(80, 24), '/tmp/fa_dense_paragraph.png',
         scale: 1.25, cols: 80, rows: 24);
     final aImg = await _renderToImage(_denseScene(80, 24), '/tmp/fa_dense_atlas.png',
@@ -214,6 +226,10 @@ void main() {
   // render as OPAQUE defaultBg (alpha 255), not transparent — i.e. the widget
   // does not depend on a host-provided background behind it.
   test('default-bg region is opaque (no host-background dependency)', () async {
+    if (!hasDejaVu) {
+      markTestSkipped('DejaVuSansMono not installed at $_mono');
+      return;
+    }
     // All-blank grid (every cell default bg, codepoint 32).
     final grid = MirrorGrid(defaultFg: _defaultFg, defaultBg: _defaultBg);
     grid.initializeEmpty(4, 8);
@@ -227,111 +243,8 @@ void main() {
     expect(data[px + 2], _defaultBg & 0xFF, reason: 'blue channel = defaultBg');
   });
 
-  // Issue #5: CJK ink must stay inside the cell — no spill into the next row.
-  // Uses a hermetic subset font (test/fixtures/fonts/) so CI does not need
-  // /usr/share/fonts. Root cause was (c): ASCII 'W' cell height shorter than
-  // the CJK natural line box; CellMetrics now takes max(ascii, CJK-natural).
-  test('CJK row ink stays within cell height (no spill into next row)', () async {
-    const family = 'cjk-fixture';
-    final fontPath = File('test/fixtures/fonts/NotoSansMonoCJKSC-subset.otf');
-    expect(fontPath.existsSync(), isTrue, reason: 'bundled CJK fixture required');
-    await _loadFont(family, fontPath.path);
-
-    const fontSize = 14.0;
-    const style = TextStyle(fontFamily: family, fontSize: fontSize, height: 1.0);
-    final metrics = CellMetrics.measure(style);
-    const cols = 8;
-    const rows = 2; // row0 = CJK, row1 = empty sentinel for spill detection
-    final grid = MirrorGrid(defaultFg: _defaultFg, defaultBg: _defaultBg);
-    final cps = Uint32List(cols)..fillRange(0, cols, 32);
-    final fgs = Uint32List(cols)..fillRange(0, cols, _defaultFg);
-    final bgs = Uint32List(cols)..fillRange(0, cols, _defaultBg);
-    final fls = Uint16List(cols);
-    var col = 0;
-    for (final cp in '中文测试'.runes) {
-      cps[col] = cp;
-      fls[col] = kFlagWide;
-      fls[col + 1] = kFlagWideSpacer;
-      col += 2;
-    }
-    grid.apply(GridUpdate(
-      full: true,
-      rows: rows,
-      columns: cols,
-      lines: [
-        LineCells(line: 0, codepoints: cps, fg: fgs, bg: bgs, flags: fls),
-        LineCells(
-          line: 1,
-          codepoints: Uint32List(cols)..fillRange(0, cols, 32),
-          fg: Uint32List(cols)..fillRange(0, cols, _defaultFg),
-          bg: Uint32List(cols)..fillRange(0, cols, _defaultBg),
-          flags: Uint16List(cols),
-        ),
-      ],
-      cursorRow: 0,
-      cursorCol: 0,
-      cursorVisible: false,
-      defaultFg: _defaultFg,
-      defaultBg: _defaultBg,
-    ));
-
-    final lineHeight = metrics.height / fontSize;
-    final glyphs = GlyphCache(
-      fontFamily: family,
-      fontSize: fontSize,
-      cellWidth: metrics.width,
-      lineHeight: lineHeight,
-      maxEntries: 1 << 20,
-      maxBuildsPerFrame: 1 << 20,
-    );
-    final painter = TerminalPainter(
-      grid: grid,
-      glyphs: glyphs,
-      cellWidth: metrics.width,
-      cellHeight: metrics.height,
-      selectionColor: 0x553A6EA5,
-      searchColors: const SearchColors(
-        matchBg: 0xAC4242,
-        matchFg: 0x181818,
-        focusedBg: 0xF4BF75,
-        focusedFg: 0x181818,
-      ),
-      hintColors: const HintColors(bg: 0xF4BF75, fg: 0x181818),
-    );
-
-    const scale = 2.0;
-    final size = ui.Size(cols * metrics.width, rows * metrics.height);
-    final rec = ui.PictureRecorder();
-    final canvas = Canvas(rec)..scale(scale);
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF181818));
-    painter.paint(canvas, size);
-    final img = rec.endRecording().toImageSync(
-        (size.width * scale).ceil(), (size.height * scale).ceil());
-    final png = await img.toByteData(format: ui.ImageByteFormat.png);
-    File('/tmp/fa_cjk_row.png').writeAsBytesSync(png!.buffer.asUint8List());
-
-    final data =
-        (await img.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint8List();
-    final cellBottom = (metrics.height * scale).ceil();
-    var spill = 0;
-    for (var y = cellBottom; y < img.height; y++) {
-      for (var x = 0; x < img.width; x++) {
-        final i = (y * img.width + x) * 4;
-        if ((data[i] - 0x18).abs() > 8 ||
-            (data[i + 1] - 0x18).abs() > 8 ||
-            (data[i + 2] - 0x18).abs() > 8) {
-          spill++;
-        }
-      }
-    }
-    expect(spill, 0,
-        reason: 'CJK ink must not spill past cellHeight into the next row '
-            '(cellH=${metrics.height}, spillPixels=$spill)');
-
-    // Non-visual twin: strut paragraph height matches the measured cell.
-    final paragraph = glyphs.tryGet('中'.runes.first, _defaultFg, wide: true)!;
-    expect(paragraph.height, lessThanOrEqualTo(metrics.height + 0.5));
-  });
+  // CJK spill / metrics coverage lives in cell_metrics_cjk_test.dart (hermetic
+  // fixture font only — no DejaVu dependency).
 }
 
 /// Asserts the atlas image converges to the paragraph image under 4×4 block
