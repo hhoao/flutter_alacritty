@@ -1,0 +1,11 @@
+NotoSansMonoCJKSC-subset.otf
+============================
+
+This file is a glyph-subset of "Noto Sans Mono CJK SC" (Regular), extracted from
+Google's Noto Sans CJK fonts for hermetic visual tests.
+
+Source: Noto Sans CJK (https://github.com/notofonts/noto-cjk)
+License: SIL Open Font License 1.1 (https://scripts.sil.org/OFL)
+
+Only the glyphs needed by flutter_alacritty visual tests are retained
+(ASCII printable + 中文测试). It is not a complete font for general use.
