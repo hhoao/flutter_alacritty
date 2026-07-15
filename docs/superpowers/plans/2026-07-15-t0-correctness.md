@@ -435,14 +435,13 @@ fn compile_search(pattern: &str, opt: &SearchOptions) -> Result<RegexSearch, Box
         regex_syntax::escape(pattern) // or manual escape if dep unavailable
     };
     // Case-neutral boundaries only — never embed (?i); case comes from SyntaxConfig.
+    // Prefer \b: (?<=\W) lookaround is rejected by regex-syntax (UnsupportedLookAround).
     if opt.whole_word {
-        pat = format!(r"(?:(?<=\W)|^)(?:{})(?:(?=\W)|$)", pat);
+        pat = format!(r"\b(?:{})\b", pat);
     }
     RegexSearch::with_case_insensitive(&pat, !opt.case_sensitive)
 }
 ```
-
-Verify the lookaround form works with `regex_automata` in unit tests (fallback: `\b(?:pat)\b` if lookaround is rejected at build time).
 
 Store `SearchOptions` (including `wrap`) on `TerminalEngine` for `search_step`.
 
@@ -467,9 +466,19 @@ fn search_step(&mut self, direction: Direction) -> bool {
         _ => false,
     }
 }
+
+/// True when `m` is a wrap-around hit relative to `origin`.
+/// Right: match starts before origin (went past end back to top).
+/// Left: match starts after origin (went past start back to bottom).
+fn match_wrapped_past_origin(m: &Match, origin: Point, direction: Direction) -> bool {
+    match direction {
+        Direction::Right => *m.start() < origin,
+        Direction::Left => *m.start() > origin,
+    }
+}
 ```
 
-Define `match_wrapped_past_origin` so that when `wrap=false`, a match on the “other side” of the buffer relative to `origin` (the classic wrap-around hit) is rejected. Cover with a unit test: pattern appears both above and below the cursor; with `wrap=false` and search downward from the lower region, do not jump to the upper hit.
+Cover with a unit test: pattern appears both above and below the cursor; with `wrap=false` and search downward from the lower region, do not jump to the upper hit.
 
 Alternative (also OK): compute a remaining-line `max_lines` that is **strictly less than** `total_lines - 1` so it survives the filter — only use this if post-filter proves awkward with wide-cell origins; document the inequality in a code comment.
 
