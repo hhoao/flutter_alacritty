@@ -94,6 +94,10 @@ class TerminalStyle {
     this.boldFamily,
     this.italicFamily,
     this.boldItalicFamily,
+    this.offsetX = 0,
+    this.offsetY = 0,
+    this.glyphOffsetX = 0,
+    this.glyphOffsetY = 0,
   })  : family = family ?? PlatformFontDefaults.primaryFamily,
         fallback = fallback ?? PlatformFontDefaults.fallbackFamilies;
 
@@ -111,6 +115,14 @@ class TerminalStyle {
   final String? italicFamily;
   final String? boldItalicFamily;
 
+  /// Extra pixels added to measured cell size (alacritty `font.offset`).
+  final double offsetX;
+  final double offsetY;
+
+  /// Shift of the glyph bitmap inside the cell (alacritty `font.glyph_offset`).
+  final double glyphOffsetX;
+  final double glyphOffsetY;
+
   /// Build the [TextStyle] the renderer measures cells from.
   TextStyle toTextStyle() => TextStyle(
         fontFamily: family,
@@ -127,6 +139,10 @@ class TerminalStyle {
     String? boldFamily,
     String? italicFamily,
     String? boldItalicFamily,
+    double? offsetX,
+    double? offsetY,
+    double? glyphOffsetX,
+    double? glyphOffsetY,
   }) =>
       TerminalStyle(
         family: family ?? this.family,
@@ -136,6 +152,10 @@ class TerminalStyle {
         boldFamily: boldFamily ?? this.boldFamily,
         italicFamily: italicFamily ?? this.italicFamily,
         boldItalicFamily: boldItalicFamily ?? this.boldItalicFamily,
+        offsetX: offsetX ?? this.offsetX,
+        offsetY: offsetY ?? this.offsetY,
+        glyphOffsetX: glyphOffsetX ?? this.glyphOffsetX,
+        glyphOffsetY: glyphOffsetY ?? this.glyphOffsetY,
       );
 
   // Value equality so `TerminalView.didUpdateWidget` only flushes the glyph
@@ -153,6 +173,10 @@ class TerminalStyle {
           boldFamily == other.boldFamily &&
           italicFamily == other.italicFamily &&
           boldItalicFamily == other.boldItalicFamily &&
+          offsetX == other.offsetX &&
+          offsetY == other.offsetY &&
+          glyphOffsetX == other.glyphOffsetX &&
+          glyphOffsetY == other.glyphOffsetY &&
           listEquals(fallback, other.fallback);
 
   @override
@@ -164,5 +188,9 @@ class TerminalStyle {
         boldFamily,
         italicFamily,
         boldItalicFamily,
+        offsetX,
+        offsetY,
+        glyphOffsetX,
+        glyphOffsetY,
       );
 }

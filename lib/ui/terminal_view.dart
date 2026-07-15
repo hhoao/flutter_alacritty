@@ -348,7 +348,7 @@ class TerminalViewState extends State<TerminalView>
     _ownsFocus = widget.focusNode == null;
     _fontSize = widget.textStyle.size;
     _style = widget.textStyle.toTextStyle().copyWith(fontSize: _fontSize);
-    _metrics = CellMetrics.measure(_style);
+    _metrics = _measureMetrics();
     _scrollController = _newScrollController();
     _wireCoalescedScrollCancel();
     widget.engine.setCellPixels(_metrics.width.round(), _metrics.height.round());
@@ -459,7 +459,7 @@ class TerminalViewState extends State<TerminalView>
         _fontSize = widget.textStyle.size;
         _glyphs.dispose();
         _style = widget.textStyle.toTextStyle().copyWith(fontSize: _fontSize);
-        _metrics = CellMetrics.measure(_style);
+        _metrics = _measureMetrics();
         _scrollController.updateCellHeight(_metrics.height);
         widget.engine.setCellPixels(
             _metrics.width.round(), _metrics.height.round());
@@ -500,6 +500,14 @@ class TerminalViewState extends State<TerminalView>
         fontSize: _fontSize,
         cellWidth: _metrics.width,
         lineHeight: widget.textStyle.lineHeight,
+        glyphOffsetX: widget.textStyle.glyphOffsetX,
+        glyphOffsetY: widget.textStyle.glyphOffsetY,
+      );
+
+  CellMetrics _measureMetrics() => CellMetrics.measure(
+        _style,
+        offsetX: widget.textStyle.offsetX,
+        offsetY: widget.textStyle.offsetY,
       );
 
   /// Ensures [_atlas] exists and matches the current font metrics and [dpr].
@@ -519,6 +527,8 @@ class TerminalViewState extends State<TerminalView>
       cellWidth: _metrics.width,
       cellHeight: _metrics.height,
       lineHeight: widget.textStyle.lineHeight,
+      glyphOffsetX: widget.textStyle.glyphOffsetX,
+      glyphOffsetY: widget.textStyle.glyphOffsetY,
       devicePixelRatio: dpr,
     );
     _atlas!.prewarmAscii();
@@ -690,7 +700,7 @@ class TerminalViewState extends State<TerminalView>
       _fontSize = clamped;
       _glyphs.dispose();
       _style = widget.textStyle.toTextStyle().copyWith(fontSize: _fontSize);
-      _metrics = CellMetrics.measure(_style);
+      _metrics = _measureMetrics();
       _scrollController.updateCellHeight(_metrics.height);
       widget.engine.setCellPixels(_metrics.width.round(), _metrics.height.round());
       _glyphs = _newGlyphCache();

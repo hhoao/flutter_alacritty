@@ -50,7 +50,7 @@ does this via `debugPrint`).
 
 | Key | Status |
 | --- | --- |
-| `font.offset` / `font.glyph_offset` | Fields parse; paint wiring pending Task 2 |
+| `font.offset` / `font.glyph_offset` | Wired — offset grows cell size; glyph_offset shifts glyph paint origin |
 | `window.opacity` | Host-only — apply to the native window (not `TerminalView.backgroundOpacity`) |
 | `window.decorations` | Host-only — library does not change window chrome |
 | `bell.animation` | Linear-only — other values are accepted but ignored at render time |
@@ -228,7 +228,7 @@ parameters:
 | `engine` | `TerminalEngine` | required | The handle the view reads/writes. |
 | `controller` | `TerminalController?` | `null` (view owns one) | Share a controller across widgets, or let the view create + dispose its own. |
 | `theme` | `TerminalTheme` | `TerminalTheme.defaults` | Colors (bg/fg, ANSI, selection, search, hint, bell overlay). |
-| `textStyle` | `TerminalStyle` | `TerminalStyle()` | Font family, fallback list, size, line height. |
+| `textStyle` | `TerminalStyle` | `TerminalStyle()` | Font family, fallback, size, line height, offset, glyph_offset. |
 | `padding` | `EdgeInsets?` | `null` | Inner padding around the cell grid. |
 | `backgroundOpacity` | `double` | `1.0` | Reserved for translucent backgrounds. |
 | `focusNode` | `FocusNode?` | `null` (view owns one) | Share focus with host widgets (e.g. restart overlay). |
@@ -425,6 +425,10 @@ class TerminalStyle {
   final List<String> fallback;
   final double size;          // 14.0 by default
   final double lineHeight;    // 1.0 by default
+  final double offsetX;       // font.offset — grows cell size
+  final double offsetY;
+  final double glyphOffsetX;  // font.glyph_offset — shifts glyph paint origin
+  final double glyphOffsetY;
 }
 ```
 

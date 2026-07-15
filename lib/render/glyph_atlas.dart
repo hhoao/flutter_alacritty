@@ -29,6 +29,8 @@ class GlyphAtlas {
     this.italicFamily,
     this.boldItalicFamily,
     this.lineHeight = 1.0,
+    this.glyphOffsetX = 0,
+    this.glyphOffsetY = 0,
     this.columns = 32,
     this.maxTextureDimension = 4096,
   })  : _slotPhysW = (cellWidth * 2 * devicePixelRatio).ceil(),
@@ -55,6 +57,10 @@ class GlyphAtlas {
   final double cellHeight;
   final double devicePixelRatio;
   final double lineHeight;
+
+  /// Shift applied to sprite destinations (alacritty `font.glyph_offset`).
+  final double glyphOffsetX;
+  final double glyphOffsetY;
 
   /// Slots per atlas row.
   final int columns;
@@ -134,7 +140,8 @@ class GlyphAtlas {
   }
 
   /// Appends one glyph at logical cell origin ([tx], [ty]) tinted [color]
-  /// (0xAARRGGBB). [key] must already [has] a slot.
+  /// (0xAARRGGBB). [key] must already [has] a slot. [glyphOffsetX]/[glyphOffsetY]
+  /// are added to the destination so the bitmap shifts inside the cell.
   void addSprite(int key, double tx, double ty, int color) {
     final slot = _slotIndex[key]!;
     final col = slot % columns;
@@ -145,8 +152,8 @@ class GlyphAtlas {
     // RSTransform: scale = 1/dpr (physical sprite -> logical), no rotation.
     _xforms[o] = 1.0 / devicePixelRatio;
     _xforms[o + 1] = 0.0;
-    _xforms[o + 2] = tx;
-    _xforms[o + 3] = ty;
+    _xforms[o + 2] = tx + glyphOffsetX;
+    _xforms[o + 3] = ty + glyphOffsetY;
     _rects[o] = l;
     _rects[o + 1] = t;
     _rects[o + 2] = l + _slotPhysW;

@@ -13,6 +13,8 @@ class GlyphCache {
     this.italicFamily,
     this.boldItalicFamily,
     this.lineHeight = 1.0,
+    this.glyphOffsetX = 0,
+    this.glyphOffsetY = 0,
     this.maxEntries = 4096,
     this.maxBuildsPerFrame = 128,
   });
@@ -30,6 +32,10 @@ class GlyphCache {
   /// and fill the cell box, so text aligns with full-cell box-drawing glyphs
   /// instead of riding high in an over-tall cell.
   final double lineHeight;
+
+  /// Shift applied when drawing paragraphs (alacritty `font.glyph_offset`).
+  final double glyphOffsetX;
+  final double glyphOffsetY;
   final int maxEntries;
 
   /// Caps synchronous paragraph layout per frame so first paint cannot freeze the UI.

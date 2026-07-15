@@ -126,6 +126,24 @@ foreground = "#aabbcc"
     expect(c.colors.background, base.colors.background); // unchanged
   });
 
+  test('parses font.offset and font.glyph_offset', () {
+    const toml = '''
+[font]
+size = 12.0
+[font.offset]
+x = 1
+y = 2
+[font.glyph_offset]
+x = 3
+y = -1
+''';
+    final c = TerminalConfig.fromTomlString(toml);
+    expect(c.font.offsetX, 1);
+    expect(c.font.offsetY, 2);
+    expect(c.font.glyphOffsetX, 3);
+    expect(c.font.glyphOffsetY, -1);
+  });
+
   group('fromTomlString', () {
     test('reads every section', () {
       const toml = '''

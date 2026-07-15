@@ -115,12 +115,11 @@ class FontConfig {
   final FontStyleConfig? italic;
   final FontStyleConfig? boldItalic;
 
-  // NOTE: offset/glyphOffset are parsed for alacritty config compatibility but
-  // not yet applied to cell metrics / glyph painting. Accepted-but-inert (like
-  // window.opacity/decorations) so configs don't error; wiring is deferred —
-  // see docs/superpowers/plans/2026-05-29-plan2o-2nb-findings.md.
+  /// Extra pixels added to measured cell width/height (alacritty `font.offset`).
   final double offsetX;
   final double offsetY;
+
+  /// Shift of the glyph bitmap inside the cell (alacritty `font.glyph_offset`).
   final double glyphOffsetX;
   final double glyphOffsetY;
 
@@ -508,6 +507,10 @@ class TerminalConfig {
         boldFamily: font.bold?.family,
         italicFamily: font.italic?.family,
         boldItalicFamily: font.boldItalic?.family,
+        offsetX: font.offsetX,
+        offsetY: font.offsetY,
+        glyphOffsetX: font.glyphOffsetX,
+        glyphOffsetY: font.glyphOffsetY,
       );
 
   /// Palette + scrollback handed to the Rust engine. palette is length 18:
@@ -675,6 +678,10 @@ class TerminalConfig {
         bold: fontStyleFrom(fontM, 'bold') ?? d.font.bold,
         italic: fontStyleFrom(fontM, 'italic') ?? d.font.italic,
         boldItalic: fontStyleFrom(fontM, 'bold_italic') ?? d.font.boldItalic,
+        offsetX: dbl(section(fontM, 'offset'), 'x', d.font.offsetX),
+        offsetY: dbl(section(fontM, 'offset'), 'y', d.font.offsetY),
+        glyphOffsetX: dbl(section(fontM, 'glyph_offset'), 'x', d.font.glyphOffsetX),
+        glyphOffsetY: dbl(section(fontM, 'glyph_offset'), 'y', d.font.glyphOffsetY),
       ),
       cursor: CursorConfig(
         blinkInterval: integer(cursorM, 'blink_interval', d.cursor.blinkInterval),

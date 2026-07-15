@@ -303,7 +303,13 @@ class TerminalPainter extends CustomPainter {
             final paragraph =
                 glyphs.tryGet(cp, ec.fg, bold: bold, italic: italic, wide: wide);
             if (paragraph != null) {
-              canvas.drawParagraph(paragraph, Offset(col * cellWidth, y));
+              canvas.drawParagraph(
+                paragraph,
+                Offset(
+                  col * cellWidth + glyphs.glyphOffsetX,
+                  y + glyphs.glyphOffsetY,
+                ),
+              );
             } else {
               needsWarmupFrame = true;
             }
@@ -312,7 +318,13 @@ class TerminalPainter extends CustomPainter {
           final paragraph =
               glyphs.tryGet(cp, ec.fg, bold: bold, italic: italic, wide: wide);
           if (paragraph != null) {
-            canvas.drawParagraph(paragraph, Offset(col * cellWidth, y));
+            canvas.drawParagraph(
+              paragraph,
+              Offset(
+                col * cellWidth + glyphs.glyphOffsetX,
+                y + glyphs.glyphOffsetY,
+              ),
+            );
           } else {
             needsWarmupFrame = true;
           }
@@ -423,7 +435,12 @@ class CursorPainter extends CustomPainter {
               bold: flags & kFlagBold != 0,
               italic: flags & kFlagItalic != 0,
               wide: onWide);
-          if (g != null) canvas.drawParagraph(g, Offset(x, y));
+          if (g != null) {
+            canvas.drawParagraph(
+              g,
+              Offset(x + glyphs.glyphOffsetX, y + glyphs.glyphOffsetY),
+            );
+          }
         }
       }
     } else if (shape == 3) {
