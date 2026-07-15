@@ -46,7 +46,7 @@
 | `lib/controller/terminal_controller.dart` | `TerminalSearchOptions` + `searchSet` |
 | `lib/engine/*` + `test/fake_binding.dart` | Plumb options |
 | `packages/rust_lib_…/rust/src/engine.rs` + `api/terminal.rs` | Search options |
-| `opensource/alacritty/alacritty_terminal/…/search.rs` | `RegexSearch::new_with_case` (patch) |
+| `opensource/alacritty/alacritty_terminal/…/search.rs` | `RegexSearch::with_case_insensitive` (patch) |
 | `docs/library-api.md` | Library vs Host + bell lock + config table |
 | `test/*` | Unit / golden / widget coverage |
 
@@ -241,7 +241,7 @@ git commit -m "feat: wire font.offset and glyph_offset into cell metrics and pai
 
 - [ ] **Step 1: Reproduce with a focused golden**
 
-Add a visual test that paints one row of CJK (e.g. `中文测试`) at fixed font/size on a known background, tagged `visual`. Capture golden. If CI lacks CJK fonts, bundle a subset font under `test/fixtures/fonts/` and load via `FontLoader`.
+Add a visual test that paints one row of CJK (e.g. `中文测试`) at fixed font/size on a known background, tagged `visual`. **Bundle a subset CJK font under `test/fixtures/fonts/`** and load via `FontLoader` — do not depend on `/usr/share/fonts/...` so CI is hermetic. Capture golden.
 
 - [ ] **Step 2: Run visual test; inspect failure / ink bounds**
 
@@ -382,14 +382,13 @@ Run: `cargo test -p alacritty_terminal search::` from the alacritty repo.
 
 - [ ] **Step 3: Point rust_lib at the patched crate**
 
-Uncomment/adjust in `packages/rust_lib_flutter_alacritty/rust/Cargo.toml`:
+**Do not commit an absolute `[patch]` path** (breaks CI). For local hacking only, uncomment the path patch. For committed/CI state: push the alacritty change to a fork and set:
 
 ```toml
-[patch."https://github.com/alacritty/alacritty.git"]
-alacritty_terminal = { path = "/home/hhoa/git/opensource/alacritty/alacritty_terminal" }
+alacritty_terminal = { git = "https://github.com/<you>/alacritty.git", rev = "<commit-with-with_case_insensitive>" }
 ```
 
-For publishable builds: open an alacritty PR; until merged, use a fork `rev` instead of a machine-local path. **Do not leave a developer-only absolute path in committed Cargo.toml for CI** — prefer fork rev or document the patch workflow in the rust_lib README.
+Or land an upstream PR and bump `rev` to that merge commit. Document the fork/PR link in the rust_lib README until upstream merges.
 
 - [ ] **Step 4: Commit** (alacritty change in its repo; rust_lib dep bump in submodule)
 
@@ -435,37 +434,44 @@ fn compile_search(pattern: &str, opt: &SearchOptions) -> Result<RegexSearch, Box
     } else {
         regex_syntax::escape(pattern) // or manual escape if dep unavailable
     };
+    // Case-neutral boundaries only — never embed (?i); case comes from SyntaxConfig.
     if opt.whole_word {
-        pat = format!(r"(?i:(?:(?<=\W)|^)(?:{})(?:(?=\W)|$))", pat);
-        // Prefer a formulation that respects case_sensitive via SyntaxConfig only;
-        // do not embed (?i) if case_sensitive — use: (?:(?<=\W)|^)(?:pat)(?:(?=\W)|$)
+        pat = format!(r"(?:(?<=\W)|^)(?:{})(?:(?=\W)|$)", pat);
     }
     RegexSearch::with_case_insensitive(&pat, !opt.case_sensitive)
 }
 ```
 
-Use a word-boundary form that works with `regex_automata` (verify in tests). Avoid double-`(?i)` when case_sensitive is true.
+Verify the lookaround form works with `regex_automata` in unit tests (fallback: `\b(?:pat)\b` if lookaround is rejected at build time).
 
-Store `SearchOptions` on `TerminalEngine` for `search_step` wrap behavior.
+Store `SearchOptions` (including `wrap`) on `TerminalEngine` for `search_step`.
 
-- [ ] **Step 3: Update `search_set` / `search_step`**
+- [ ] **Step 3: Update `search_set` / `search_step` (wrap=false must not no-op)**
+
+**Critical:** `Term::search_next` does `max_lines.filter(|m| m + 1 < total_lines())`. Passing `Some(total_lines - 1)` becomes `None` (full wrap) — a no-op. Do **not** use that formula.
+
+Preferred approach — **post-filter wrapped hits** (clear, matches GNOME “stop at end”):
 
 ```rust
 pub fn search_set(&mut self, pattern: String, opt: SearchOptions) -> bool { … }
 
 fn search_step(&mut self, direction: Direction) -> bool {
-    let max_lines = if self.search_wrap {
-        None
-    } else {
-        // Limit to remaining lines in direction so the iterator does not wrap
-        // the full grid (alacritty: None ⇒ end wraps via Boundary::None).
-        Some(self.term.total_lines().saturating_sub(1))
-    };
-    // … term.search_next(re, origin, direction, Side::Left, max_lines)
+    // Always search with max_lines: None (engine finds next hit in buffer order).
+    let found = self.term.search_next(re, origin, direction, Side::Left, None);
+    match found {
+        Some(m) if self.search_wrap || !Self::match_wrapped_past_origin(&m, origin, direction) => {
+            self.term.scroll_to_point(*m.start());
+            self.current_match = Some(m);
+            true
+        }
+        _ => false,
+    }
 }
 ```
 
-Validate wrap=false semantics with a dedicated unit test (match only after origin toward end; no hit from other side).
+Define `match_wrapped_past_origin` so that when `wrap=false`, a match on the “other side” of the buffer relative to `origin` (the classic wrap-around hit) is rejected. Cover with a unit test: pattern appears both above and below the cursor; with `wrap=false` and search downward from the lower region, do not jump to the upper hit.
+
+Alternative (also OK): compute a remaining-line `max_lines` that is **strictly less than** `total_lines - 1` so it survives the filter — only use this if post-filter proves awkward with wide-cell origins; document the inequality in a code comment.
 
 - [ ] **Step 4: FRB API**
 
