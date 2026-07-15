@@ -10,9 +10,7 @@ import 'package:flutter/services.dart'
         KeyDownEvent,
         KeyEvent,
         KeyRepeatEvent,
-        LogicalKeyboardKey,
-        SystemSound,
-        SystemSoundType;
+        LogicalKeyboardKey;
 
 import '../controller/terminal_controller.dart';
 import '../engine/terminal_engine.dart';
@@ -26,6 +24,7 @@ import '../links/link_overlay.dart';
 import '../links/terminal_link_provider.dart';
 import '../render/cell_flags.dart';
 import '../render/cell_metrics.dart';
+import 'terminal_bell.dart';
 import 'terminal_viewport.dart';
 import 'terminal_viewport_controller.dart';
 import 'terminal_scroll_controller.dart';
@@ -587,15 +586,14 @@ class TerminalViewState extends State<TerminalView>
   }
 
   void _flashBell() {
-    if (widget.onBell != null) {
-      widget.onBell!();
-    } else {
-      SystemSound.play(SystemSoundType.alert);
-    }
-    if (widget.bellDuration > Duration.zero) {
-      _bellCtrl.value = 1.0;
-      _bellCtrl.animateTo(0.0, duration: widget.bellDuration);
-    }
+    handleTerminalBell(
+      onBell: widget.onBell,
+      bellDuration: widget.bellDuration,
+      flashVisual: (duration) {
+        _bellCtrl.value = 1.0;
+        _bellCtrl.animateTo(0.0, duration: duration);
+      },
+    );
   }
 
   /// Provider cache/async confirmation changed — refresh the hovered row only.

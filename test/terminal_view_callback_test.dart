@@ -78,6 +78,8 @@ Future<void> _pumpView(
   void Function(TapDownDetails, CellOffset)? onSecondaryTapDown,
   void Function(TapUpDetails, CellOffset)? onSecondaryTapUp,
   void Function(String)? onLinkActivate,
+  void Function()? onBell,
+  Duration bellDuration = Duration.zero,
   bool primaryTapActivatesLink = false,
   List<TerminalLinkProvider>? linkProviders,
 }) async {
@@ -90,6 +92,8 @@ Future<void> _pumpView(
         onSecondaryTapDown: onSecondaryTapDown,
         onSecondaryTapUp: onSecondaryTapUp,
         onLinkActivate: onLinkActivate,
+        onBell: onBell,
+        bellDuration: bellDuration,
         primaryTapActivatesLink: primaryTapActivatesLink,
         linkProviders: linkProviders ?? const [],
       ),
@@ -159,6 +163,50 @@ void main() {
     await tester.pump();
 
     expect(gotCell, isNotNull);
+  });
+
+  testWidgets('onBell spy is called when bell fires', (tester) async {
+    final binding = FakeBinding();
+    final engine = await _engineForView(binding);
+    addTearDown(engine.dispose);
+
+    var bells = 0;
+    await _pumpView(
+      tester,
+      engine: engine,
+      onBell: () => bells++,
+      bellDuration: const Duration(milliseconds: 100),
+    );
+
+    binding.onBell!();
+    await tester.pump();
+
+    expect(bells, 1);
+    final state = tester.state<TerminalViewState>(find.byType(TerminalView));
+    expect(state.bellControllerForTest.value, greaterThan(0.0));
+  });
+
+  testWidgets('bellDuration zero keeps animation at 0', (tester) async {
+    final binding = FakeBinding();
+    final engine = await _engineForView(binding);
+    addTearDown(engine.dispose);
+
+    var bells = 0;
+    await _pumpView(
+      tester,
+      engine: engine,
+      onBell: () => bells++,
+      // Default Duration.zero — visual flash must short-circuit.
+      bellDuration: Duration.zero,
+    );
+
+    binding.onBell!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 5));
+
+    expect(bells, 1);
+    final state = tester.state<TerminalViewState>(find.byType(TerminalView));
+    expect(state.bellControllerForTest.value, 0.0);
   });
 
   // Regression for the engine-swap bug caught in 2W code review: TerminalView
