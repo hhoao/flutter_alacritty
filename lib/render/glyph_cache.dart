@@ -34,6 +34,7 @@ class GlyphCache {
   final double lineHeight;
 
   /// Shift applied when drawing paragraphs (alacritty `font.glyph_offset`).
+  /// Stored here so the painter can read it on the drawParagraph fallback path.
   final double glyphOffsetX;
   final double glyphOffsetY;
   final int maxEntries;

@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 /// A GPU glyph atlas: each distinct glyph (codepoint × bold × italic × wide) is
 /// rasterized ONCE as a white coverage mask into a single [ui.Image], so the
 /// painter can submit a whole frame's glyphs with one `Canvas.drawRawAtlas`
@@ -161,6 +163,15 @@ class GlyphAtlas {
     _colors[_count] = color;
     _count++;
   }
+
+  /// Number of sprites queued since the last [beginBatch]. Tests only.
+  @visibleForTesting
+  int get debugBatchCount => _count;
+
+  /// RSTransform scratch for the current batch (`[sc, rot, tx, ty]…`). Tests only.
+  @visibleForTesting
+  Float32List get debugBatchXforms =>
+      Float32List.sublistView(_xforms, 0, _count * 4);
 
   /// Emits the accumulated glyphs in one call. No-op if empty or not yet built.
   void drawBatch(ui.Canvas canvas, ui.Paint paint) {
