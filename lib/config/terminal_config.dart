@@ -481,6 +481,24 @@ class TerminalConfig {
         bellOverlay: bell.color,
       );
 
+  /// Returns human-readable warnings for keys that are host-only or
+  /// accepted-but-limited. Call after load; example/host may `debugPrint` each.
+  List<String> warnInertOrHostOnlyKeys() {
+    final out = <String>[];
+    if (window.opacity != 1.0) {
+      out.add('window.opacity is host-only; apply to the native window yourself '
+          '(not TerminalView.backgroundOpacity).');
+    }
+    if (window.decorations != 'full') {
+      out.add('window.decorations is host-only; the library does not change '
+          'window chrome.');
+    }
+    if (bell.animation != 'linear') {
+      out.add('bell.animation=${bell.animation} ignored; only linear is rendered.');
+    }
+    return out;
+  }
+
   /// Font/size slice consumed by `TerminalView`.
   TerminalStyle get style => TerminalStyle(
         family: font.family,

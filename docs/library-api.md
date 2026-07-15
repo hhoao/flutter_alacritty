@@ -10,6 +10,51 @@ full integration example (drag-and-drop, right-click menu, restart overlay,
 Everything reachable from `package:flutter_alacritty/flutter_alacritty.dart`
 is considered the public surface; anything else is internal.
 
+## Library vs host
+
+The library owns VT correctness, rendering, input, and opt-in composables.
+The host owns app chrome, window management, and policy overrides.
+
+| Capability | Library | Host |
+|------------|:-------:|:----:|
+| VT / damage / GPU atlas / scrollback | ✓ | |
+| Selection, search engine, OSC 52 | ✓ | |
+| Search **bar** UI | composable | may replace |
+| Copy as HTML / write contents | API (+ helper) | menu wiring |
+| Bell | `engine.bell` + `TerminalView` default `SystemSound` / `onBell` override; visual via `bellDuration` | custom audio / mute policy |
+| OSC 8 + link providers | ✓ | open URL / context menu |
+| Semantics / a11y tree | ✓ | platform AT bridge quirks |
+| Vi mode / hints (later) | ✓ (opt-in) | keybinding chrome |
+| SSH **backend** reference (later) | optional `PtyBackend` impl | SSH UI / auth |
+| Tabs, profiles, confirm-close | | ✓ |
+| Fullscreen / multi-window | | ✓ |
+
+## Bell defaults
+
+Bell behavior is locked to the current `TerminalView` defaults (not a breaking
+change):
+
+- When `onBell == null`, the view plays `SystemSoundType.alert` on each
+  `engine.bell` event.
+- Visual flash runs only when `bellDuration > Duration.zero` (default
+  `Duration.zero` disables the overlay).
+- Pass `onBell` to replace or mute the audible bell; adjust `bellDuration` and
+  `theme.bellOverlay` (from `TerminalConfig.bell.color`) for visual policy.
+
+## Config knobs (accepted vs wired)
+
+Some alacritty-style TOML keys parse into `TerminalConfig` but are host-only or
+not yet wired to paint/runtime. After loading config, call
+`TerminalConfig.warnInertOrHostOnlyKeys()` and log each string (the example app
+does this via `debugPrint`).
+
+| Key | Status |
+| --- | --- |
+| `font.offset` / `font.glyph_offset` | Fields parse; paint wiring pending Task 2 |
+| `window.opacity` | Host-only — apply to the native window (not `TerminalView.backgroundOpacity`) |
+| `window.decorations` | Host-only — library does not change window chrome |
+| `bell.animation` | Linear-only — other values are accepted but ignored at render time |
+
 ## Quick start
 
 ```dart

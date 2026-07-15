@@ -64,6 +64,21 @@ void main() {
     expect(b.animation, 'linear');
   });
 
+  test('warnInertOrHostOnlyKeys reports window host-only and non-linear bell', () {
+    final cfg = TerminalConfig.defaults().copyWith(
+      window: const WindowConfig(opacity: 0.9, decorations: 'none'),
+      bell: const BellConfig(color: 0xFFFFFF, duration: 0, animation: 'EaseOutExpo'),
+    );
+    final warnings = cfg.warnInertOrHostOnlyKeys();
+    expect(warnings.any((w) => w.contains('window.opacity')), isTrue);
+    expect(warnings.any((w) => w.contains('window.decorations')), isTrue);
+    expect(warnings.any((w) => w.contains('bell.animation')), isTrue);
+  });
+
+  test('warnInertOrHostOnlyKeys is empty for defaults', () {
+    expect(TerminalConfig.defaults().warnInertOrHostOnlyKeys(), isEmpty);
+  });
+
   test('fromTomlString reads [bell]', () {
     const toml = '''
 [bell]

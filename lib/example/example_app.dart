@@ -139,6 +139,9 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     if (next.shell.program != prev.shell.program) {
       debugPrint('flutter_alacritty: [shell] change applies on restart');
     }
+    for (final warning in next.warnInertOrHostOnlyKeys()) {
+      debugPrint('flutter_alacritty: $warning');
+    }
   }
 
   /// Mirror engine.title → host-visible notifier.
@@ -151,10 +154,8 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   /// [TerminalView] layout commit via [_onPtyResize].
   void _ensureEngine() {
     if (_engine != null) return;
-    if (_config.window.opacity != 1.0 ||
-        _config.window.decorations != 'full') {
-      debugPrint('flutter_alacritty: window.opacity/decorations are host-applied; '
-          'see linux/runner for native window setup (config-only here)');
+    for (final warning in _config.warnInertOrHostOnlyKeys()) {
+      debugPrint('flutter_alacritty: $warning');
     }
     try {
       final engine = TerminalEngine(
