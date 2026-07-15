@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_alacritty/render/cell_flags.dart';
+import 'package:flutter_alacritty/render/cell_metrics.dart';
 import 'package:flutter_alacritty/render/glyph_atlas.dart';
 import 'package:flutter_alacritty/render/glyph_cache.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
@@ -224,6 +225,112 @@ void main() {
     expect(data[px], (_defaultBg >> 16) & 0xFF, reason: 'red channel = defaultBg');
     expect(data[px + 1], (_defaultBg >> 8) & 0xFF, reason: 'green channel = defaultBg');
     expect(data[px + 2], _defaultBg & 0xFF, reason: 'blue channel = defaultBg');
+  });
+
+  // Issue #5: CJK ink must stay inside the cell — no spill into the next row.
+  // Uses a hermetic subset font (test/fixtures/fonts/) so CI does not need
+  // /usr/share/fonts. Root cause was (c): ASCII 'W' cell height shorter than
+  // the CJK natural line box; CellMetrics now takes max(ascii, CJK-natural).
+  test('CJK row ink stays within cell height (no spill into next row)', () async {
+    const family = 'cjk-fixture';
+    final fontPath = File('test/fixtures/fonts/NotoSansMonoCJKSC-subset.otf');
+    expect(fontPath.existsSync(), isTrue, reason: 'bundled CJK fixture required');
+    await _loadFont(family, fontPath.path);
+
+    const fontSize = 14.0;
+    const style = TextStyle(fontFamily: family, fontSize: fontSize, height: 1.0);
+    final metrics = CellMetrics.measure(style);
+    const cols = 8;
+    const rows = 2; // row0 = CJK, row1 = empty sentinel for spill detection
+    final grid = MirrorGrid(defaultFg: _defaultFg, defaultBg: _defaultBg);
+    final cps = Uint32List(cols)..fillRange(0, cols, 32);
+    final fgs = Uint32List(cols)..fillRange(0, cols, _defaultFg);
+    final bgs = Uint32List(cols)..fillRange(0, cols, _defaultBg);
+    final fls = Uint16List(cols);
+    var col = 0;
+    for (final cp in '中文测试'.runes) {
+      cps[col] = cp;
+      fls[col] = kFlagWide;
+      fls[col + 1] = kFlagWideSpacer;
+      col += 2;
+    }
+    grid.apply(GridUpdate(
+      full: true,
+      rows: rows,
+      columns: cols,
+      lines: [
+        LineCells(line: 0, codepoints: cps, fg: fgs, bg: bgs, flags: fls),
+        LineCells(
+          line: 1,
+          codepoints: Uint32List(cols)..fillRange(0, cols, 32),
+          fg: Uint32List(cols)..fillRange(0, cols, _defaultFg),
+          bg: Uint32List(cols)..fillRange(0, cols, _defaultBg),
+          flags: Uint16List(cols),
+        ),
+      ],
+      cursorRow: 0,
+      cursorCol: 0,
+      cursorVisible: false,
+      defaultFg: _defaultFg,
+      defaultBg: _defaultBg,
+    ));
+
+    final lineHeight = metrics.height / fontSize;
+    final glyphs = GlyphCache(
+      fontFamily: family,
+      fontSize: fontSize,
+      cellWidth: metrics.width,
+      lineHeight: lineHeight,
+      maxEntries: 1 << 20,
+      maxBuildsPerFrame: 1 << 20,
+    );
+    final painter = TerminalPainter(
+      grid: grid,
+      glyphs: glyphs,
+      cellWidth: metrics.width,
+      cellHeight: metrics.height,
+      selectionColor: 0x553A6EA5,
+      searchColors: const SearchColors(
+        matchBg: 0xAC4242,
+        matchFg: 0x181818,
+        focusedBg: 0xF4BF75,
+        focusedFg: 0x181818,
+      ),
+      hintColors: const HintColors(bg: 0xF4BF75, fg: 0x181818),
+    );
+
+    const scale = 2.0;
+    final size = ui.Size(cols * metrics.width, rows * metrics.height);
+    final rec = ui.PictureRecorder();
+    final canvas = Canvas(rec)..scale(scale);
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF181818));
+    painter.paint(canvas, size);
+    final img = rec.endRecording().toImageSync(
+        (size.width * scale).ceil(), (size.height * scale).ceil());
+    final png = await img.toByteData(format: ui.ImageByteFormat.png);
+    File('/tmp/fa_cjk_row.png').writeAsBytesSync(png!.buffer.asUint8List());
+
+    final data =
+        (await img.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint8List();
+    final cellBottom = (metrics.height * scale).ceil();
+    var spill = 0;
+    for (var y = cellBottom; y < img.height; y++) {
+      for (var x = 0; x < img.width; x++) {
+        final i = (y * img.width + x) * 4;
+        if ((data[i] - 0x18).abs() > 8 ||
+            (data[i + 1] - 0x18).abs() > 8 ||
+            (data[i + 2] - 0x18).abs() > 8) {
+          spill++;
+        }
+      }
+    }
+    expect(spill, 0,
+        reason: 'CJK ink must not spill past cellHeight into the next row '
+            '(cellH=${metrics.height}, spillPixels=$spill)');
+
+    // Non-visual twin: strut paragraph height matches the measured cell.
+    final paragraph = glyphs.tryGet('中'.runes.first, _defaultFg, wide: true)!;
+    expect(paragraph.height, lessThanOrEqualTo(metrics.height + 0.5));
   });
 }
 

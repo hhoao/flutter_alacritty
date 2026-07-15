@@ -491,6 +491,11 @@ class TerminalViewState extends State<TerminalView>
     }
   }
 
+  /// Strut multiplier matching the measured cell (may exceed configured
+  /// `lineHeight` when CJK fallback metrics need a taller line box — #5).
+  double get _effectiveLineHeight =>
+      _fontSize > 0 ? _metrics.height / _fontSize : widget.textStyle.lineHeight;
+
   GlyphCache _newGlyphCache() => GlyphCache(
         fontFamily: widget.textStyle.family,
         fontFamilyFallback: widget.textStyle.fallback,
@@ -499,7 +504,7 @@ class TerminalViewState extends State<TerminalView>
         boldItalicFamily: widget.textStyle.boldItalicFamily,
         fontSize: _fontSize,
         cellWidth: _metrics.width,
-        lineHeight: widget.textStyle.lineHeight,
+        lineHeight: _effectiveLineHeight,
         glyphOffsetX: widget.textStyle.glyphOffsetX,
         glyphOffsetY: widget.textStyle.glyphOffsetY,
       );
@@ -526,7 +531,7 @@ class TerminalViewState extends State<TerminalView>
       fontSize: _fontSize,
       cellWidth: _metrics.width,
       cellHeight: _metrics.height,
-      lineHeight: widget.textStyle.lineHeight,
+      lineHeight: _effectiveLineHeight,
       glyphOffsetX: widget.textStyle.glyphOffsetX,
       glyphOffsetY: widget.textStyle.glyphOffsetY,
       devicePixelRatio: dpr,
