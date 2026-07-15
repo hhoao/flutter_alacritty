@@ -162,6 +162,7 @@ abstract class RustLibApi extends BaseApi {
   bool crateApiTerminalEngineSearchSet({
     required TerminalEngine engine,
     required String pattern,
+    required SearchOptions options,
   });
 
   void crateApiTerminalEngineSelectionClear({required TerminalEngine engine});
@@ -858,6 +859,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool crateApiTerminalEngineSearchSet({
     required TerminalEngine engine,
     required String pattern,
+    required SearchOptions options,
   }) {
     return handler.executeSync(
       SyncTask(
@@ -868,6 +870,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(pattern, serializer);
+          sse_encode_box_autoadd_search_options(options, serializer);
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
         },
         codec: SseCodec(
@@ -875,7 +878,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: null,
         ),
         constMeta: kCrateApiTerminalEngineSearchSetConstMeta,
-        argValues: [engine, pattern],
+        argValues: [engine, pattern, options],
         apiImpl: this,
       ),
     );
@@ -884,7 +887,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTerminalEngineSearchSetConstMeta =>
       const TaskConstMeta(
         debugName: "engine_search_set",
-        argNames: ["engine", "pattern"],
+        argNames: ["engine", "pattern", "options"],
       );
 
   @override
@@ -1238,6 +1241,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SearchOptions dco_decode_box_autoadd_search_options(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_search_options(raw);
+  }
+
+  @protected
   EngineConfig dco_decode_engine_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1374,6 +1383,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SearchOptions dco_decode_search_options(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return SearchOptions(
+      caseSensitive: dco_decode_bool(arr[0]),
+      wholeWord: dco_decode_bool(arr[1]),
+      regex: dco_decode_bool(arr[2]),
+      wrap: dco_decode_bool(arr[3]),
+    );
+  }
+
+  @protected
   int dco_decode_u_16(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -1470,6 +1493,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_engine_config(deserializer));
+  }
+
+  @protected
+  SearchOptions sse_decode_box_autoadd_search_options(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_search_options(deserializer));
   }
 
   @protected
@@ -1655,6 +1686,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SearchOptions sse_decode_search_options(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_caseSensitive = sse_decode_bool(deserializer);
+    var var_wholeWord = sse_decode_bool(deserializer);
+    var var_regex = sse_decode_bool(deserializer);
+    var var_wrap = sse_decode_bool(deserializer);
+    return SearchOptions(
+      caseSensitive: var_caseSensitive,
+      wholeWord: var_wholeWord,
+      regex: var_regex,
+      wrap: var_wrap,
+    );
+  }
+
+  @protected
   int sse_decode_u_16(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint16();
@@ -1754,6 +1800,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_engine_config(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_search_options(
+    SearchOptions self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_search_options(self, serializer);
   }
 
   @protected
@@ -1912,6 +1967,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.cursorColor, serializer);
     sse_encode_f_64(self.scrollFraction, serializer);
     sse_encode_i_32(self.scrollLineDelta, serializer);
+  }
+
+  @protected
+  void sse_encode_search_options(SearchOptions self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.caseSensitive, serializer);
+    sse_encode_bool(self.wholeWord, serializer);
+    sse_encode_bool(self.regex, serializer);
+    sse_encode_bool(self.wrap, serializer);
   }
 
   @protected

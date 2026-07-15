@@ -124,9 +124,11 @@ String? engineSelectionText({required TerminalEngine engine}) =>
 bool engineSearchSet({
   required TerminalEngine engine,
   required String pattern,
+  required SearchOptions options,
 }) => RustLib.instance.api.crateApiTerminalEngineSearchSet(
   engine: engine,
   pattern: pattern,
+  options: options,
 );
 
 bool engineSearchNext({required TerminalEngine engine}) =>

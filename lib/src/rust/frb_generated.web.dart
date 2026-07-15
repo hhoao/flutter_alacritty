@@ -61,6 +61,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   EngineConfig dco_decode_box_autoadd_engine_config(dynamic raw);
 
   @protected
+  SearchOptions dco_decode_box_autoadd_search_options(dynamic raw);
+
+  @protected
   EngineConfig dco_decode_engine_config(dynamic raw);
 
   @protected
@@ -98,6 +101,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RenderUpdate dco_decode_render_update(dynamic raw);
+
+  @protected
+  SearchOptions dco_decode_search_options(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -150,6 +156,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  SearchOptions sse_decode_box_autoadd_search_options(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   EngineConfig sse_decode_engine_config(SseDeserializer deserializer);
 
   @protected
@@ -187,6 +198,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RenderUpdate sse_decode_render_update(SseDeserializer deserializer);
+
+  @protected
+  SearchOptions sse_decode_search_options(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -244,6 +258,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_search_options(
+    SearchOptions self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_engine_config(EngineConfig self, SseSerializer serializer);
 
   @protected
@@ -296,6 +316,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_render_update(RenderUpdate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_search_options(SearchOptions self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);

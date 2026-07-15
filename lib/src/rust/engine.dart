@@ -183,3 +183,38 @@ class RenderUpdate {
           scrollFraction == other.scrollFraction &&
           scrollLineDelta == other.scrollLineDelta;
 }
+
+/// Options for terminal buffer search (FRB-visible via `api::search_options`).
+///
+/// Defaults match GNOME Terminal-style find: case-insensitive, not whole-word,
+/// regex enabled, wrap around.
+class SearchOptions {
+  final bool caseSensitive;
+  final bool wholeWord;
+  final bool regex;
+  final bool wrap;
+
+  const SearchOptions({
+    required this.caseSensitive,
+    required this.wholeWord,
+    required this.regex,
+    required this.wrap,
+  });
+
+  @override
+  int get hashCode =>
+      caseSensitive.hashCode ^
+      wholeWord.hashCode ^
+      regex.hashCode ^
+      wrap.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SearchOptions &&
+          runtimeType == other.runtimeType &&
+          caseSensitive == other.caseSensitive &&
+          wholeWord == other.wholeWord &&
+          regex == other.regex &&
+          wrap == other.wrap;
+}
