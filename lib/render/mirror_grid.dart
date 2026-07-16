@@ -297,7 +297,22 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     }
   }
 
+  void _markRowDirtyIfInRange(int row) {
+    if (row >= 0 && row < _rows) {
+      _dirtyRows.add(row);
+    }
+  }
+
   void apply(GridUpdate u) {
+    final oldCursorRow = _cursorRow;
+    final oldCursorCol = _cursorCol;
+    final oldCursorVisible = _cursorVisible;
+    final oldCursorShape = _cursorShape;
+    final oldCursorBlinking = _cursorBlinking;
+    final oldCursorColor = _cursorColor;
+    final oldDefaultFg = _defaultFg;
+    final oldDefaultBg = _defaultBg;
+
     _defaultFg = u.defaultFg;
     _defaultBg = u.defaultBg;
     _cursorColor = u.cursorColor;
@@ -355,6 +370,26 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     if (u.full || u.historySize > 0) {
       _historySize = u.historySize;
     }
+
+    // Metadata-only (or mixed) damage: default colors repaint the whole grid;
+    // cursor field changes need the old and new cursor rows at minimum.
+    if (!u.full && delta == 0) {
+      if (u.defaultFg != oldDefaultFg || u.defaultBg != oldDefaultBg) {
+        _markAllRowsDirty();
+      } else {
+        final cursorChanged = u.cursorRow != oldCursorRow ||
+            u.cursorCol != oldCursorCol ||
+            u.cursorVisible != oldCursorVisible ||
+            u.cursorShape != oldCursorShape ||
+            u.cursorBlinking != oldCursorBlinking ||
+            u.cursorColor != oldCursorColor;
+        if (cursorChanged) {
+          _markRowDirtyIfInRange(oldCursorRow);
+          _markRowDirtyIfInRange(u.cursorRow);
+        }
+      }
+    }
+
     _generation++;
     _notifyRepaint();
   }
