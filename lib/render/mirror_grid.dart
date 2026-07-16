@@ -172,6 +172,9 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
   Uint32List _overHyperlinkId = Uint32List(0);
   bool _repaintNotifyScheduled = false;
   bool _repaintDisposed = false;
+  // Row indices dirtied by the last apply / initializeEmpty; drained by
+  // [takeDirtyRows] so painters can clip to dirty bands.
+  final Set<int> _dirtyRows = <int>{};
 
   @override
   void dispose() {
@@ -275,8 +278,23 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     _cursorRow = 0;
     _cursorCol = 0;
     _cursorVisible = true;
+    _markAllRowsDirty();
     _generation++;
     _notifyRepaint();
+  }
+
+  /// Returns sorted dirty viewport row indices since the last take, then clears.
+  List<int> takeDirtyRows() {
+    final out = _dirtyRows.toList()..sort();
+    _dirtyRows.clear();
+    return out;
+  }
+
+  void _markAllRowsDirty() {
+    _dirtyRows.clear();
+    for (var i = 0; i < _rows; i++) {
+      _dirtyRows.add(i);
+    }
   }
 
   void apply(GridUpdate u) {
@@ -287,16 +305,22 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     // viewport size (see FrbEngineBinding._toGridUpdate). Resize on full only.
     if (u.full) {
       _ensureSize(u.rows, u.columns);
+      _markAllRowsDirty();
     }
     final delta = u.scrollLineDelta;
     if (delta != 0 && _rows > 0) {
       _rotateRows(delta);
+      // Rotation reshuffles the whole viewport; mark all rows dirty.
+      _markAllRowsDirty();
     }
     for (final l in u.lines) {
       if (l.line < 0) continue;
       if (l.line >= _rows) {
         _applyOverscanLine(l);
         continue;
+      }
+      if (!u.full) {
+        _dirtyRows.add(l.line);
       }
       // Partial damage can arrive with engine cols > mirror cols when resize races
       // the async drain (LayoutBuilder grew before post-frame resize ran).
