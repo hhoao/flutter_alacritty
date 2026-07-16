@@ -1,3 +1,23 @@
+## Unreleased
+
+### T0 — Correctness / polish
+
+- **Config:** Wire `font.offset` / `glyph_offset` into cell metrics and paint;
+  warn on host-only `window.*` keys (`opacity`, `decorations`, etc.); document
+  `bell.animation` as linear-only (other values ignored with a warning).
+- **Fix:** CJK glyph vertical metrics no longer leave extra pixels under glyphs
+  ([#5](https://github.com/hhoao/flutter_alacritty/issues/5)).
+- **Feat:** Search options (case / whole word / regex / wrap) on the Rust engine
+  and `TerminalController`, with matching toggles on the opt-in
+  `TerminalSearchBar`.
+- **Docs:** Library vs Host ownership catalog; bell defaults locked
+  (`SystemSound` when `onBell` is null; visual flash only if `bellDuration > 0`).
+- **Note:** `case_sensitive: false` is always case-insensitive (not Alacritty
+  smart-case).
+- **Note:** `rust_lib` temporarily patches local `alacritty_terminal` for
+  `RegexSearch::with_case_insensitive` — replace with a published fork/`rev`
+  (or upstream merge) before pub.dev publish.
+
 ## 2.3.2
 
 - Publish CI checks out the `rust_lib_flutter_alacritty` submodule so
