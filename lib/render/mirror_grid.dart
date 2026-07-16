@@ -79,8 +79,9 @@ class GridUpdate {
   final double scrollFraction;
 
   /// The line directly above the viewport top, used to fill the sliver revealed
-  /// when [scrollFraction] > 0. Present only on full updates (null on partial
-  /// damage, where the fraction is always 0).
+  /// when [scrollFraction] > 0. Full snapshots may set this (or tag the last
+  /// line as overscan); partial/incremental scroll refresh may also carry
+  /// overscan + fraction via [kOverscanLineTag] on an edge-row update.
   final LineCells? overscan;
 
   /// Net viewport line scroll for incremental scroll refresh. The mirror rotates

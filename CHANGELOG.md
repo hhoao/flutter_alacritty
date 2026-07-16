@@ -1,5 +1,24 @@
 ## Unreleased
 
+### TUI scroll performance
+
+- **Feat:** Mouse-report TUI wheel via `TuiWheelDistance` +
+  `TerminalView.tuiScrollSensitivity` (discrete/notch vs trackpad 1:1).
+- **Feat:** Interaction-first PTY drain (~100ms microtask window) and DEC 2026
+  synchronized-output present hold on `TerminalEngineClient`.
+- **Feat:** Dual present path — CustomPainter (cold) plus Rust-raster →
+  `ui.Image` hot path gated by `preferGpuSurface` /
+  `FLUTTER_ALACRITTY_GPU=1` (not `FlPixelBufferTexture` yet; ASCII bitmap
+  glyphs; mid-cell `scroll_fraction` and selection/search visuals not on
+  raster — data path via `refreshView`).
+- **Perf:** Dirty-row painter, glyph-atlas LRU, tighter `scroll_fraction`
+  damage (partial + overscan).
+- **Docs:** `docs/library-api.md` scroll/present sections; latency method in
+  `docs/superpowers/specs/2026-07-16-tui-scroll-latency-method.md`.
+- **Bench:** Loosen `kScrollRefreshVsFullSnapshotMaxRatio` 0.65 → 1.0 — both
+  scroll FFI paths are sub-ms so ratio noise flake; cell-count + absolute µs
+  ceilings remain the regression gates.
+
 ### T0 — Correctness / polish
 
 - **Config:** Wire `font.offset` / `glyph_offset` into cell metrics and paint;

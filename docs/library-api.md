@@ -242,7 +242,9 @@ parameters:
 | `cursorBlinkInterval` | `Duration` | `530 ms` | Half-period of the cursor blink. |
 | `bellDuration` | `Duration` | `Duration.zero` | Visual-bell fade duration; zero disables the flash. |
 | `doubleClickThreshold` | `Duration` | `300 ms` | Window for word/line selection on multi-click. |
-| `scrollMultiplier` | `int` | `3` | Lines per wheel notch when not in mouse-report mode. |
+| `scrollMultiplier` | `int` | `3` | Lines per wheel notch for history / alternate-scroll (not mouse-report). |
+| `tuiScrollSensitivity` | `int` | `1` | Mouse-report TUI wheel multiplier (1..10). Discrete/notch path only; trackpad 1:1 ignores it. |
+| `preferGpuSurface` | `bool?` | `null` | Present path: `null` auto-probes, `true` force GPU/raster attempt, `false` force CustomPainter. |
 | `preeditBg` / `preeditFg` | `int` | `0x282828` / `0xD8D8D8` | IME preedit overlay colors (packed RGB). |
 | `preeditUnderline` | `bool` | `true` | Whether the preedit overlay is underlined. |
 | `shortcuts` | `Map<ShortcutActivator, Intent>?` | `null` = `defaultTerminalShortcuts` | Hotkey bindings; see below. |
@@ -581,7 +583,59 @@ Absolute scroll (`scrollToBottom` / `scrollToTop` / `scrollToOffset`) cancels
 pending gesture scroll, awaits [TerminalScrollController.drainHistoryScroll],
 then applies the target position — so scrollbar drags do not race in-flight pan.
 
-`scrollMultiplier` (default `3`) scales OS scroll deltas; `3` is neutral 1.0×.
+### Scroll knobs
+
+| Knob | Default | Role |
+|------|---------|------|
+| `scrollMultiplier` | `3` (= 1.0×) | History wheel and alternate-scroll (no mouse mode) scale |
+| `tuiScrollSensitivity` | `1` (clamped 1..10) | Mouse-report TUI wheel only |
+
+**Discrete / mouse-notch vs trackpad:** Flutter has no `wheelDeltaY`. The
+controller classifies `abs(dy) >= 50` as a discrete notch (log-curve + short
+burst bonus, then × `tuiScrollSensitivity`) and smaller pixel streams as
+trackpad-like (accumulate cell-height units 1:1; sensitivity ignored).
+Alternate-scroll without mouse reporting still uses `scrollMultiplier`.
+
+### Interactive drain (~100ms)
+
+`TerminalEngineClient` coalesces PTY bytes to a post-frame boundary in steady
+state (at most one `advance` in flight). After keys / program-scroll writes,
+`markInteractive` opens a **~100ms** window that schedules drain via
+**microtask** instead of waiting for the idle post-frame callback — still
+single-flight; the next batch queues when the current advance finishes.
+
+### DEC 2026 present hold
+
+While synchronized output is active (`CSI ?2026h` … `?2026l`, bit on
+`modeFlags`), the client **holds** MirrorGrid / raster presents. When the mode
+clears, it applies **one** full snapshot (search-aware when search is active)
+so mid-sync TUI redraws do not flicker.
+
+### Dual present path
+
+`TerminalView` selects a present surface via `preferGpuSurface` and
+`GpuSurfaceController`:
+
+| Path | When | Mechanism |
+|------|------|-----------|
+| **Cold** — CustomPainter | Default / probe fail / `preferGpuSurface: false` | `MirrorGrid` + `TerminalPainter` + glyph atlas; dirty-row paint when `GridUpdate.full == false` |
+| **Hot** — Rust-raster → `ui.Image` | Probe succeeds (`preferGpuSurface: true`, or auto with `FLUTTER_ALACRITTY_GPU=1`) | Rust fills a retained RGBA pixmap; Dart uploads to `ui.Image` and draws via `RasterPresentPainter` (skips the per-cell paint loop). Cursor stays on `CursorPainter` |
+
+Probe/attach failure latches painter fallback until `retry()` / restart.
+`preferGpuSurface: null` auto-probes; without `FLUTTER_ALACRITTY_GPU=1`,
+default auto stays on the painter so widget tests remain deterministic.
+
+**Honest MVP gaps (hot path):**
+
+- Not a real Flutter external `Texture` yet (`FlPixelBufferTexture` /
+  platform texture registrar) — raster → `ui.Image` only (`textureId == -1`).
+- Glyphs on the raster path are embedded **ASCII bitmap** stubs, not the Dart
+  glyph atlas / host fonts.
+- Mid-cell `scroll_fraction` is carried in chrome but **not painted** as a
+  sub-cell shift on the raster image (painter path still shifts + overscan).
+- Selection / search **visual** highlights are not baked into the raster
+  pixmap; the **data** path stays correct via on-demand `refreshView()`
+  (full cell mirror when selection/search/a11y need it).
 
 ### Program-scroll latency measurement
 
