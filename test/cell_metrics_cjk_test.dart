@@ -23,6 +23,25 @@ Future<void> _loadFont(String family, String path) async {
   await loader.load();
 }
 
+/// Primary-font line height the way Alacritty uses FreeType metrics: ascent+descent.
+double _primaryMetricsHeight(TextStyle style) {
+  final probe = TextPainter(
+    text: TextSpan(
+      text: 'Éy',
+      style: TextStyle(
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        fontStyle: style.fontStyle,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final lines = probe.computeLineMetrics();
+  if (lines.isEmpty) return style.fontSize ?? 14;
+  return lines.first.ascent + lines.first.descent;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -30,50 +49,18 @@ void main() {
     await _loadFont('cjkmono', _cjkFont);
   });
 
-  // Root cause (issue #5): cell height from ASCII 'W' + lineHeight can be
-  // shorter than the CJK fallback's natural line box, so ink sits tight against
-  // (or past) the cell edge. Measure must include a CJK sample.
-  test('cell height fits CJK natural line box even when lineHeight is 1.0', () {
-    const style = TextStyle(
-      fontFamily: 'cjkmono',
-      fontSize: 14,
-      height: 1.0,
-    );
-    final asciiOnly = TextPainter(
-      text: TextSpan(text: 'W' * 20, style: style),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final naturalCjk = TextPainter(
-      text: const TextSpan(
-        text: 'Wy中',
-        style: TextStyle(fontFamily: 'cjkmono', fontSize: 14),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final metrics = CellMetrics.measure(style);
-
-    expect(naturalCjk.height, greaterThan(asciiOnly.height),
-        reason: 'fixture font must expose taller CJK metrics than crushed ASCII');
-    expect(metrics.height, greaterThanOrEqualTo(naturalCjk.height - 0.01),
-        reason: 'cell must be tall enough for CJK natural line box');
-  });
-
-  // Issue #5 is typically Latin primary + CJK in fontFamilyFallback.
-  // Flutter's mixed-run line box often stays on Latin metrics; measure must
-  // still grow the cell from the fallback font's natural CJK height.
-  test('Latin primary + CJK fallback cell height fits CJK natural line box', () {
+  // Alacritty-style: cell height from the *primary* face metrics, not from
+  // probing CJK/fallback runs and taking max.
+  test('cell height follows primary font metrics, not CJK fallback natural height',
+      () {
     const style = TextStyle(
       fontFamily: 'monospace',
       fontFamilyFallback: ['cjkmono'],
       fontSize: 14,
       height: 1.0,
     );
-    final asciiOnly = TextPainter(
-      text: TextSpan(text: 'W' * 20, style: style),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final fallbackNatural = TextPainter(
+    final primaryH = _primaryMetricsHeight(style);
+    final cjkNatural = TextPainter(
       text: const TextSpan(
         text: 'Wy中',
         style: TextStyle(fontFamily: 'cjkmono', fontSize: 14),
@@ -83,11 +70,31 @@ void main() {
 
     final metrics = CellMetrics.measure(style);
 
-    expect(fallbackNatural.height, greaterThan(asciiOnly.height),
-        reason: 'CJK fallback font must expose taller natural metrics than Latin ASCII');
-    expect(metrics.height, greaterThanOrEqualTo(fallbackNatural.height - 0.01),
-        reason: 'cell must be tall enough for Latin+CJK-fallback natural line box');
+    expect(cjkNatural.height, greaterThan(primaryH + 0.5),
+        reason: 'fixture must make CJK taller than Latin primary metrics');
+    expect(metrics.contentHeight, closeTo(primaryH * 1.0, 0.75),
+        reason: 'cell content height = primary ascent+descent × height mul');
+    expect(metrics.contentHeight, lessThan(cjkNatural.height - 0.5),
+        reason: 'must NOT grow the cell to fit CJK fallback natural box');
+  });
 
+  test('configured height multiplier scales primary metrics (leading)', () {
+    const base = TextStyle(fontFamily: 'monospace', fontSize: 14, height: 1.0);
+    const padded =
+        TextStyle(fontFamily: 'monospace', fontSize: 14, height: 1.2);
+    final a = CellMetrics.measure(base);
+    final b = CellMetrics.measure(padded);
+    expect(b.contentHeight / a.contentHeight, closeTo(1.2, 0.05));
+  });
+
+  test('CJK glyph paragraph stays within primary-metrics cell via strut', () {
+    const style = TextStyle(
+      fontFamily: 'monospace',
+      fontFamilyFallback: ['cjkmono'],
+      fontSize: 14,
+      height: 1.0,
+    );
+    final metrics = CellMetrics.measure(style);
     final cache = GlyphCache(
       fontFamily: 'monospace',
       fontFamilyFallback: const ['cjkmono'],
@@ -100,35 +107,19 @@ void main() {
     expect(paragraph.height, lessThanOrEqualTo(metrics.height + 0.5));
   });
 
-  test('CJK glyph paragraph height stays within measured cell height', () {
+  test('CJK row ink stays within cell height (strut + hard clip)', () async {
     const fontSize = 14.0;
+    // Latin primary + taller CJK fallback: cell stays on primary metrics;
+    // strut + hard clip must keep ink out of the next row.
     const style = TextStyle(
-      fontFamily: 'cjkmono',
+      fontFamily: 'monospace',
+      fontFamilyFallback: ['cjkmono'],
       fontSize: fontSize,
       height: 1.0,
     );
     final metrics = CellMetrics.measure(style);
-    final cache = GlyphCache(
-      fontFamily: 'cjkmono',
-      fontSize: fontSize,
-      cellWidth: metrics.width,
-      // Strut matches content height, not configured lineHeight alone.
-      lineHeight: metrics.strutLineHeight(fontSize),
-      maxBuildsPerFrame: 64,
-    );
-    final paragraph = cache.tryGet('中'.runes.first, 0xFFFFFF, wide: true)!;
-    expect(paragraph.height, lessThanOrEqualTo(metrics.height + 0.5));
-  });
-
-  // Issue #5: CJK ink must stay inside the cell — no spill into the next row.
-  // Lives here (not visual_render_test) so CI never needs /usr/share DejaVu.
-  test('CJK row ink stays within cell height (no spill into next row)', () async {
-    const family = 'cjkmono';
-    const fontSize = 14.0;
-    const style = TextStyle(fontFamily: family, fontSize: fontSize, height: 1.0);
-    final metrics = CellMetrics.measure(style);
     const cols = 8;
-    const rows = 2; // row0 = CJK, row1 = empty sentinel for spill detection
+    const rows = 2;
     final grid = MirrorGrid(defaultFg: _defaultFg, defaultBg: _defaultBg);
     final cps = Uint32List(cols)..fillRange(0, cols, 32);
     final fgs = Uint32List(cols)..fillRange(0, cols, _defaultFg);
@@ -163,7 +154,8 @@ void main() {
     ));
 
     final glyphs = GlyphCache(
-      fontFamily: family,
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['cjkmono'],
       fontSize: fontSize,
       cellWidth: metrics.width,
       lineHeight: metrics.strutLineHeight(fontSize),
@@ -187,20 +179,28 @@ void main() {
 
     const scale = 2.0;
     final size = ui.Size(cols * metrics.width, rows * metrics.height);
+    final imgW = (size.width * scale).ceil();
+    final imgH = (size.height * scale).ceil();
     final rec = ui.PictureRecorder();
     final canvas = Canvas(rec)..scale(scale);
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF181818));
+    // Fill the full device bitmap (ceil can add a fractional pad row/col that
+    // PictureRecorder never paints — that pad is not glyph spill).
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, imgW / scale, imgH / scale),
+      Paint()..color = const Color(0xFF181818),
+    );
     painter.paint(canvas, size);
-    final img = rec.endRecording().toImageSync(
-        (size.width * scale).ceil(), (size.height * scale).ceil());
-    final png = await img.toByteData(format: ui.ImageByteFormat.png);
-    File('/tmp/fa_cjk_row.png').writeAsBytesSync(png!.buffer.asUint8List());
+    final img = rec.endRecording().toImageSync(imgW, imgH);
 
     final data =
         (await img.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint8List();
-    final cellBottom = (metrics.height * scale).ceil();
+    // First device row belonging to grid row 1 (not ceil of row0 — that would
+    // skip legitimate bleed into the fractional overlap band).
+    final row1Start = (metrics.height * scale).floor();
+    // Stop before ceil-padding below the logical grid (same pad fill above).
+    final contentBottom = (rows * metrics.height * scale).floor();
     var spill = 0;
-    for (var y = cellBottom; y < img.height; y++) {
+    for (var y = row1Start; y < contentBottom; y++) {
       for (var x = 0; x < img.width; x++) {
         final i = (y * img.width + x) * 4;
         if ((data[i] - 0x18).abs() > 8 ||

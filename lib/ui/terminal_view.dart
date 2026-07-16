@@ -490,8 +490,8 @@ class TerminalViewState extends State<TerminalView>
     }
   }
 
-  /// Strut multiplier matching measured *content* height (may exceed configured
-  /// `lineHeight` when CJK fallback metrics need a taller line box — #5).
+  /// Strut multiplier matching measured *content* height (primary-font
+  /// ascent+descent × configured height — Alacritty-style; #5).
   /// Uses [CellMetrics.contentHeight] so `font.offset` Y grows the cell without
   /// stretching the strut the same way content growth does.
   double get _effectiveLineHeight => _fontSize > 0

@@ -287,7 +287,15 @@ class GlyphAtlas {
       ..addText(String.fromCharCode(codepoint));
     final layoutW = wide ? cellWidth * 2 : cellWidth;
     final p = builder.build()..layout(ui.ParagraphConstraints(width: layoutW));
+    // Hard-clip to the cell slot (Alacritty atlas semantics): ink must not
+    // bleed into neighboring slots when a glyph's outline exceeds the line box.
+    canvas.save();
+    canvas.clipRect(
+      ui.Rect.fromLTWH(dx, dy, layoutW, cellHeight),
+      doAntiAlias: false,
+    );
     canvas.drawParagraph(p, ui.Offset(dx, dy));
+    canvas.restore();
     p.dispose();
   }
 

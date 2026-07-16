@@ -303,6 +303,14 @@ class TerminalPainter extends CustomPainter {
             final paragraph =
                 glyphs.tryGet(cp, ec.fg, bold: bold, italic: italic, wide: wide);
             if (paragraph != null) {
+              final clipW = wide ? cellWidth * 2 : cellWidth;
+              canvas.save();
+              // Hard clip (no AA on the clip edge): ink must not bleed into the
+              // next cell — Alacritty atlas/slot semantics.
+              canvas.clipRect(
+                Rect.fromLTWH(col * cellWidth, y, clipW, cellHeight),
+                doAntiAlias: false,
+              );
               canvas.drawParagraph(
                 paragraph,
                 Offset(
@@ -310,6 +318,7 @@ class TerminalPainter extends CustomPainter {
                   y + glyphs.glyphOffsetY,
                 ),
               );
+              canvas.restore();
             } else {
               needsWarmupFrame = true;
             }
@@ -318,6 +327,12 @@ class TerminalPainter extends CustomPainter {
           final paragraph =
               glyphs.tryGet(cp, ec.fg, bold: bold, italic: italic, wide: wide);
           if (paragraph != null) {
+            final clipW = wide ? cellWidth * 2 : cellWidth;
+            canvas.save();
+            canvas.clipRect(
+              Rect.fromLTWH(col * cellWidth, y, clipW, cellHeight),
+              doAntiAlias: false,
+            );
             canvas.drawParagraph(
               paragraph,
               Offset(
@@ -325,6 +340,7 @@ class TerminalPainter extends CustomPainter {
                 y + glyphs.glyphOffsetY,
               ),
             );
+            canvas.restore();
           } else {
             needsWarmupFrame = true;
           }

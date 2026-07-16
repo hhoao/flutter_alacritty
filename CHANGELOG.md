@@ -5,7 +5,9 @@
 - **Config:** Wire `font.offset` / `glyph_offset` into cell metrics and paint;
   warn on host-only `window.*` keys (`opacity`, `decorations`, etc.); document
   `bell.animation` as linear-only (other values ignored with a warning).
-- **Fix:** CJK glyph vertical metrics no longer leave extra pixels under glyphs
+- **Fix:** Cell height follows **primary font** ascent+descent (Alacritty-style),
+  not `max()` over CJK/fallback natural boxes; glyphs are hard-clipped to the
+  cell slot so tall outlines cannot spill into the next row
   ([#5](https://github.com/hhoao/flutter_alacritty/issues/5)).
 - **Feat:** Search options (case / whole word / regex / wrap) on the Rust engine
   and `TerminalController`, with matching toggles on the opt-in
