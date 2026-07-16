@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import '../config/terminal_config.dart';
 import '../controller/terminal_controller.dart';
+import '../controller/terminal_search_options.dart';
 import '../engine/terminal_engine.dart';
 import '../input/key_bindings.dart';
 import '../input/paste.dart';
@@ -115,6 +116,12 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   int? _exitCode;
   String? _errorMessage;
   bool _searchOpen = false;
+  String _searchPattern = '';
+  // Defaults match TerminalSearchOptions / GNOME-aligned engine defaults.
+  bool _caseSensitive = false;
+  bool _wholeWord = false;
+  bool _regex = true;
+  bool _wrap = true;
 
   final GlobalKey<State<TerminalView>> _viewKey =
       GlobalKey<State<TerminalView>>();
@@ -251,20 +258,36 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
     _ensureEngine();
   }
 
-  void _searchChanged(String pattern) {
+  TerminalSearchOptions get _searchOptions => TerminalSearchOptions(
+        caseSensitive: _caseSensitive,
+        wholeWord: _wholeWord,
+        regex: _regex,
+        wrap: _wrap,
+      );
+
+  void _applySearch(String pattern) {
+    _searchPattern = pattern;
     if (pattern.isEmpty) {
       _controller.searchClear();
     } else {
-      _controller.searchSet(pattern);
+      _controller.searchSet(pattern, options: _searchOptions);
     }
-    // No setState — the search bar is wrapped in ListenableBuilder over the
-    // controller (Fix #9), so it rebuilds automatically when searchValid
-    // flips.
+    // No setState for pattern-only updates — the search bar is wrapped in
+    // ListenableBuilder over the controller (Fix #9), so it rebuilds when
+    // searchValid flips. Toggle changes call setState themselves.
+  }
+
+  void _searchChanged(String pattern) => _applySearch(pattern);
+
+  void _setSearchOption(void Function() update) {
+    setState(update);
+    _applySearch(_searchPattern);
   }
 
   void _closeSearch() {
     setState(() {
       _searchOpen = false;
+      _searchPattern = '';
     });
     _controller.searchClear();
   }
@@ -272,6 +295,7 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
   void _toggleSearch() {
     setState(() {
       _searchOpen = !_searchOpen;
+      if (!_searchOpen) _searchPattern = '';
     });
     if (!_searchOpen) _controller.searchClear();
   }
@@ -482,10 +506,22 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                                 builder: (context, _) => TerminalSearchBar(
                                   visible: _searchOpen,
                                   invalidPattern: !_controller.searchValid,
+                                  caseSensitive: _caseSensitive,
+                                  wholeWord: _wholeWord,
+                                  regex: _regex,
+                                  wrap: _wrap,
                                   onChanged: _searchChanged,
                                   onNext: _controller.searchNext,
                                   onPrev: _controller.searchPrev,
                                   onClose: _closeSearch,
+                                  onCaseSensitiveChanged: (v) =>
+                                      _setSearchOption(() => _caseSensitive = v),
+                                  onWholeWordChanged: (v) =>
+                                      _setSearchOption(() => _wholeWord = v),
+                                  onRegexChanged: (v) =>
+                                      _setSearchOption(() => _regex = v),
+                                  onWrapChanged: (v) =>
+                                      _setSearchOption(() => _wrap = v),
                                 ),
                               ),
                             ),

@@ -206,16 +206,20 @@ Groupings:
   `readSelectionText()`, `capturePrimary()`. The `primary` getter returns the
   middle-click paste buffer captured at the last selection end. `kind` is
   0=character, 1=word, 2=line (click count - 1).
-- **Search** — `searchSet(pattern)` (returns compile success; empty pattern is
-  always valid), `searchNext()`, `searchPrev()`, `searchClear()`. The
-  notifier-backed `searchPattern` / `searchValid` getters drive the host's
-  search-bar UI.
+- **Search** — `searchSet(pattern, {options})` (returns compile success; empty
+  pattern is always valid), `searchNext()`, `searchPrev()`, `searchClear()`.
+  Pass `TerminalSearchOptions` (case / whole-word / regex / wrap; defaults
+  match the engine) to recompile with flags. The notifier-backed
+  `searchPattern` / `searchValid` / `searchOptions` getters drive the host's
+  search-bar UI. `TerminalSearchBar` is an **opt-in composable** (exported from
+  the library barrel); hosts may ignore it and drive the controller only.
 - **Scroll** — `scrollLines(delta)`, `scrollToBottom()`, `scrollToTop()`,
   `scrollToOffset(lines)` (all `Future<void>`). Absolute edge hops cancel any
   coalesced wheel/pan accumulators so scrollbar / ScrollTo* gestures are not
   undone on the next frame.
 
-Reading getters: `selectionActive`, `primary`, `searchPattern`, `searchValid`.
+Reading getters: `selectionActive`, `primary`, `searchPattern`, `searchValid`,
+`searchOptions`.
 
 ## TerminalView parameters
 
@@ -585,7 +589,8 @@ then applies the target position — so scrollbar drags do not race in-flight pa
 above plus the screen-level surface a real terminal needs:
 
 - Restart overlay on shell exit (`pty.exitCode` -> dimmed banner over the view)
-- Search bar visible via `Ctrl+Shift+F`, wired to `TerminalController` search
+- Search bar (`TerminalSearchBar`) via `Ctrl+Shift+F`, with case / whole-word /
+  regex / wrap toggles re-calling `searchSet` with `TerminalSearchOptions`
 - File drag-and-drop via `desktop_drop` -> `pasteBytes` -> `engine.write`
 - Right-click context menu with Copy / Paste / Open Hyperlink / Search
 - `package:url_launcher` for Ctrl+click on hyperlinks
