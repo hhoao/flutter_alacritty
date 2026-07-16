@@ -439,7 +439,9 @@ git commit -am "feat: glyph atlas LRU eviction under pressure"
 
 - [ ] **Step 1: Write failing Rust test — scroll_fraction != 0 with display_offset==0 returns partial-capable update including overscan + fraction, not always full viewport lines**
 
-- [ ] **Step 2: Change `take_damage` so `scroll_fraction != 0` alone does not force `full_snapshot` when live edge; keep full when `display_offset > 0` **or** document retained full for history mid-cell if still required for correctness — prefer edge-row path from `scroll_refresh`
+Also update/replace any existing test that locks today’s behavior (e.g. `take_damage_forces_full_when_fraction_nonzero`) so it asserts the new contract instead of fighting the change.
+
+- [ ] **Step 2: Change `take_damage` so `scroll_fraction != 0` alone does not force `full_snapshot` when live edge; keep full when `display_offset > 0`, or document retained full for history mid-cell if still required for correctness — prefer edge-row path from `scroll_refresh`
 
 - [ ] **Step 3: `cargo test` in rust package + Dart scroll benchmarks**
 
