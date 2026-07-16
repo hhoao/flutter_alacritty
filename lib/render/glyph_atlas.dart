@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -39,10 +40,9 @@ class GlyphAtlas {
         _slotPhysH = (cellHeight * devicePixelRatio).ceil() {
     // Cap the glyph set so the atlas image never exceeds the GPU's max texture
     // dimension (4096 is safe on essentially all targets). The width is fixed
-    // (columns × slot), so only height grows; bound it to `maxRows` rows. Glyphs
-    // past the cap fall back to the per-cell drawParagraph path (handled by the
-    // painter) — common glyphs (ASCII + on-screen CJK) get atlased, a pathological
-    // flood of distinct glyphs degrades gracefully instead of garbling.
+    // (columns × slot), so only height grows; bound it to `maxRows` rows. When
+    // full, [rebuildIfNeeded] evicts least-recently-used slots so new glyphs
+    // still get atlased instead of permanently falling back to drawParagraph.
     final maxRows = (maxTextureDimension ~/ _slotPhysH).clamp(1, 1 << 20);
     _maxSlots = maxRows * columns;
   }
@@ -72,12 +72,13 @@ class GlyphAtlas {
   late final int _maxSlots;
 
   ui.Image? _image;
-  final Map<int, int> _slotIndex = {}; // key -> slot ordinal
+  /// Insertion / touch order: least-recently-used keys iterate first.
+  final LinkedHashMap<int, int> _slotIndex = LinkedHashMap(); // key -> slot ordinal
   final Set<int> _pending = {};
   int _generation = 0;
 
-  /// Max distinct glyphs the atlas can hold before overflow falls back to
-  /// drawParagraph (derived from [maxTextureDimension]). Exposed for tests.
+  /// Max distinct glyphs the atlas can hold before LRU eviction
+  /// (derived from [maxTextureDimension]). Exposed for tests.
   int get capacity => _maxSlots;
 
   // Reusable per-frame batch scratch (avoids allocating ~30KB/frame). 4 floats
@@ -107,13 +108,11 @@ class GlyphAtlas {
   bool has(int key) => _slotIndex.containsKey(key);
 
   /// Records that [key] is needed; it gets a slot on the next [rebuildIfNeeded].
-  /// Returns false if the glyph isn't available yet (painter should fall back).
-  /// Once the atlas is at [capacity], new glyphs are NOT queued — they fall back
-  /// permanently to drawParagraph, so `hasPending` stays false and the painter
-  /// doesn't spin scheduling frames for glyphs that will never get a slot.
+  /// Returns false if the glyph isn't available yet (painter should fall back
+  /// this frame). When the atlas is at [capacity], the key is still queued —
+  /// [rebuildIfNeeded] will evict least-recently-used slots to make room.
   bool request(int key) {
     if (_slotIndex.containsKey(key)) return true;
-    if (_slotIndex.length + _pending.length >= _maxSlots) return false;
     _pending.add(key);
     return false;
   }
@@ -144,8 +143,9 @@ class GlyphAtlas {
   /// Appends one glyph at logical cell origin ([tx], [ty]) tinted [color]
   /// (0xAARRGGBB). [key] must already [has] a slot. [glyphOffsetX]/[glyphOffsetY]
   /// are added to the destination so the bitmap shifts inside the cell.
+  /// Marks [key] as most-recently-used so it is not preferred for eviction.
   void addSprite(int key, double tx, double ty, int color) {
-    final slot = _slotIndex[key]!;
+    final slot = _touchLru(key);
     final col = slot % columns;
     final row = slot ~/ columns;
     final l = (col * _slotPhysW).toDouble();
@@ -162,6 +162,13 @@ class GlyphAtlas {
     _rects[o + 3] = t + _slotPhysH;
     _colors[_count] = color;
     _count++;
+  }
+
+  /// Moves [key] to the MRU end of [_slotIndex]; returns its slot ordinal.
+  int _touchLru(int key) {
+    final slot = _slotIndex.remove(key)!;
+    _slotIndex[key] = slot;
+    return slot;
   }
 
   /// Number of sprites queued since the last [beginBatch]. Tests only.
@@ -191,33 +198,40 @@ class GlyphAtlas {
   /// Rebuilds the atlas image if new glyphs were [request]ed. Synchronous
   /// (`toImageSync`). Growth is INCREMENTAL — the previous image is blitted into
   /// the (possibly taller) new image and only the newly-assigned glyphs are
-  /// rasterized — so a rebuild is O(new glyphs), not O(all). Returns true if a
-  /// rebuild happened (painter should repaint).
+  /// rasterized — so a rebuild is O(new glyphs), not O(all). When at [capacity],
+  /// least-recently-used slots are evicted first and their atlas cells reused.
+  /// Returns true if a rebuild happened (painter should repaint).
   ///
   /// [maxNewGlyphs] caps how many pending glyphs are rasterized per call so a
   /// unicode flood cannot stall the UI thread in one `toImageSync`.
   bool rebuildIfNeeded({int maxNewGlyphs = 512}) {
     if (_pending.isEmpty) return false;
-    // Assign slots to the pending keys after the existing ones (cap already
-    // enforced in `request`, so this never exceeds [_maxSlots]).
+    // Assign slots to pending keys; evict LRU when full so we never throw or
+    // permanently refuse glyphs under atlas pressure.
     final newKeys = <int>[];
+    final protected = <int>{}; // keys assigned this batch — never re-evict them
     for (final k in _pending.toList()) {
       if (_slotIndex.containsKey(k)) {
         _pending.remove(k);
         continue;
       }
-      if (_slotIndex.length >= _maxSlots) {
-        break;
-      }
       if (newKeys.length >= maxNewGlyphs) {
         break;
       }
-      _slotIndex[k] = _slotIndex.length;
+      final slot = _allocateSlot(protected: protected);
+      if (slot == null) {
+        // Every resident glyph is protected this batch — stop; remaining stay pending.
+        break;
+      }
+      _slotIndex[k] = slot;
+      protected.add(k);
       newKeys.add(k);
       _pending.remove(k);
     }
     if (newKeys.isEmpty) return false;
 
+    // Immediate reuse keeps slot indices contiguous 0..length-1, so length
+    // is a safe extent for atlas dimensions.
     final rows = (_slotIndex.length / columns).ceil();
     final physW = columns * _slotPhysW;
     final physH = rows * _slotPhysH;
@@ -226,6 +240,7 @@ class GlyphAtlas {
     final canvas = ui.Canvas(rec);
     // Blit the existing atlas (1:1, same physical resolution) so we don't
     // re-rasterize glyphs that already have slots; new rows below stay blank.
+    // Evicted cells are overwritten below when their slot is reused.
     final old = _image;
     if (old != null) {
       canvas.drawImage(old, ui.Offset.zero, ui.Paint());
@@ -254,6 +269,25 @@ class GlyphAtlas {
     _image = img;
     _generation++;
     return true;
+  }
+
+  /// Returns a free or newly grown slot, or null if capacity is exhausted by
+  /// [protected] keys that must not be evicted this batch.
+  int? _allocateSlot({required Set<int> protected}) {
+    if (_slotIndex.length < _maxSlots) {
+      return _slotIndex.length;
+    }
+    // Evict the least-recently-used key that is not protected this batch.
+    // Collect the victim first — mutating LinkedHashMap during key iteration throws.
+    int? victimKey;
+    for (final k in _slotIndex.keys) {
+      if (!protected.contains(k)) {
+        victimKey = k;
+        break;
+      }
+    }
+    if (victimKey == null) return null;
+    return _slotIndex.remove(victimKey)!;
   }
 
   void _paintGlyph(ui.Canvas canvas, int key, double dx, double dy) {

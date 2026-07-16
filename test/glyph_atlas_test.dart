@@ -59,7 +59,8 @@ void main() {
     atlas.dispose();
   });
 
-  test('caps at capacity — overflow glyphs are not queued (permanent fallback)', () {
+  test('exceeding capacity evicts LRU slots without throwing; re-request re-rasterizes',
+      () {
     // Tiny texture budget → small capacity, so we can exhaust it cheaply.
     // cellHeight 16 × dpr 2 = 32px slots; 64px budget → 2 rows × 32 cols = 64 slots.
     final atlas = make(maxTextureDimension: 64);
@@ -69,20 +70,33 @@ void main() {
     for (var i = 0; i < atlas.capacity; i++) {
       expect(atlas.request(0x100 + i), isFalse); // queued
     }
-    // One more distinct glyph: must NOT queue (cap reached) and must keep
-    // hasPending honest so the painter doesn't spin scheduling frames.
-    final overflow = 0x100 + atlas.capacity;
-    expect(atlas.request(overflow), isFalse);
+    expect(atlas.rebuildIfNeeded(), isTrue);
+    for (var i = 0; i < atlas.capacity; i++) {
+      expect(atlas.has(0x100 + i), isTrue);
+    }
 
-    atlas.rebuildIfNeeded();
-    // The capacity glyphs got slots; the overflow one never did.
-    expect(atlas.has(0x100), isTrue);
-    expect(atlas.has(0x100 + atlas.capacity - 1), isTrue);
-    expect(atlas.has(overflow), isFalse);
-    // Re-requesting the overflow glyph still won't queue it (no pending churn).
+    // Touch every slot except the oldest so 0x100 stays least-recently-used.
+    atlas.beginBatch(atlas.capacity);
+    for (var i = 1; i < atlas.capacity; i++) {
+      atlas.addSprite(0x100 + i, 0, 0, 0xFFFFFFFF);
+    }
+
+    // One more distinct glyph: must queue (not throw) and displace the LRU.
+    final overflow = 0x100 + atlas.capacity;
+    expect(() => atlas.request(overflow), returnsNormally);
     expect(atlas.request(overflow), isFalse);
-    expect(atlas.hasPending, isFalse,
-        reason: 'capped glyph must not keep hasPending true (no scheduleFrame spin)');
+    expect(atlas.hasPending, isTrue);
+    expect(atlas.rebuildIfNeeded(), isTrue);
+
+    expect(atlas.has(overflow), isTrue);
+    expect(atlas.has(0x100), isFalse, reason: 'LRU unused slot must be evicted');
+    expect(atlas.has(0x100 + 1), isTrue, reason: 'recently used slots stay');
+
+    // Evicted glyph can be requested again and re-rasterized into a new slot.
+    expect(atlas.request(0x100), isFalse);
+    expect(atlas.hasPending, isTrue);
+    expect(atlas.rebuildIfNeeded(), isTrue);
+    expect(atlas.has(0x100), isTrue);
     atlas.dispose();
   });
 }
