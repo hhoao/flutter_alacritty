@@ -33,6 +33,7 @@ import '../render/glyph_atlas.dart';
 import '../render/glyph_cache.dart';
 import '../render/gpu_surface.dart';
 import '../render/mirror_grid.dart';
+import '../render/raster_present_surface.dart';
 import '../render/terminal_painter.dart';
 import '../theme/terminal_theme.dart';
 import 'preedit_overlay.dart';
@@ -297,6 +298,7 @@ class TerminalViewState extends State<TerminalView>
   double _lastScrollFraction = 0;
 
   late GpuSurfaceController _gpuSurface;
+  final RasterPresentSurface _rasterPresent = RasterPresentSurface();
 
   // The painter and UI helpers read the grid directly; the engine owns the
   // grid (single source of truth), and the view never paints before the
@@ -377,6 +379,7 @@ class TerminalViewState extends State<TerminalView>
     _glyphs = _newGlyphCache();
     _gpuSurface = GpuSurfaceController(
       preferGpuSurface: widget.preferGpuSurface,
+      probe: _gpuProbe,
     );
     unawaited(_attachGpuSurface());
     _bellCtrl = AnimationController(
@@ -518,9 +521,16 @@ class TerminalViewState extends State<TerminalView>
     if (oldWidget.preferGpuSurface != widget.preferGpuSurface) {
       _gpuSurface = GpuSurfaceController(
         preferGpuSurface: widget.preferGpuSurface,
+        probe: _gpuProbe,
       );
       unawaited(_attachGpuSurface());
     }
+  }
+
+  /// Prefer GPU when forced, or when `FLUTTER_ALACRITTY_GPU=1` (default probe).
+  Future<bool> _gpuProbe() async {
+    if (widget.preferGpuSurface == true) return true;
+    return GpuSurfaceController.defaultProbe();
   }
 
   /// Strut multiplier matching measured *content* height (primary-font
@@ -579,18 +589,45 @@ class TerminalViewState extends State<TerminalView>
     _atlas = null;
   }
 
-  /// Probes/attaches the GPU surface; rebuilds when latch or [gpuReady] changes.
+  /// Probes/attaches the GPU/raster surface; rebuilds when latch or [gpuReady]
+  /// changes. On success, enables chrome-only mirror + Rust-raster presents.
   Future<void> _attachGpuSurface() async {
-    await _gpuSurface.ensureAttached();
-    if (mounted) setState(() {});
+    final ok = await _gpuSurface.ensureAttached();
+    if (!mounted) return;
+    if (ok && _gpuSurface.useRasterPresent) {
+      _engine.setRasterPresent(
+        enabled: true,
+        onPresent: (frame) {
+          unawaited(_rasterPresent.present(frame));
+        },
+      );
+      // Seed the pixmap so the first frame is not blank.
+      _engine.refreshView();
+    } else {
+      _engine.setRasterPresent(enabled: false);
+    }
+    setState(() {});
   }
 
-  /// Grid present widget. GPU path uses [CustomPainter] until Task 10 wires a
-  /// real texture id ([GpuSurfaceController.shouldUseGpuSurface] gates the swap).
+  /// Grid present widget. GPU/raster path draws the Rust RGBA pixmap; cursor
+  /// stays on [CursorPainter] above. Falls back to [TerminalPainter].
   Widget _buildGridPresent(Size paintSize) {
     if (_gpuSurface.shouldUseGpuSurface) {
-      // Task 10: return Texture(textureId: …). Keep painter until a real id
-      // exists — never mount Texture(textureId: -1).
+      if (_gpuSurface.textureId >= 0) {
+        return Texture(textureId: _gpuSurface.textureId);
+      }
+      // Rust-raster → ui.Image (MVP; not a true external Texture).
+      return RepaintBoundary(
+        child: CustomPaint(
+          size: paintSize,
+          isComplex: true,
+          willChange: true,
+          painter: RasterPresentPainter(
+            surface: _rasterPresent,
+            logicalSize: paintSize,
+          ),
+        ),
+      );
     }
     return RepaintBoundary(
       child: CustomPaint(
@@ -654,6 +691,8 @@ class TerminalViewState extends State<TerminalView>
     _glyphs.dispose();
     _disposeAtlas();
     _gridRetain.dispose();
+    _rasterPresent.dispose();
+    _engine.setRasterPresent(enabled: false);
     if (widget.linkProviders.isNotEmpty) {
       _grid.removeListener(_onGridLinkContextChanged);
     }
@@ -1054,11 +1093,8 @@ class TerminalViewState extends State<TerminalView>
               onLongPressEnd: _onLongPressEnd,
               child: Stack(
                 children: [
-                  // Grid layer: repaints only on grid mutation. Its own
-                  // RepaintBoundary keeps its raster isolated so the cursor /
-                  // bell / preedit layers above don't dirty it, and vice versa.
-                  // Task 10: when [_gpuSurface.shouldUseGpuSurface], swap
-                  // CustomPaint for Texture — never Texture(textureId: -1).
+                  // Grid layer: repaints only on grid / raster mutation.
+                  // Cursor stays on CursorPainter above (not baked into raster).
                   _buildGridPresent(paintSize),
                   // Cursor layer: a single cell, on its own RepaintBoundary, so
                   // the blink timer re-rasters only the cursor — not the grid.

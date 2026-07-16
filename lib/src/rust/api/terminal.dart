@@ -6,7 +6,10 @@
 import '../engine.dart';
 import '../event_proxy.dart';
 import '../frb_generated.dart';
+import '../terminal_raster_present.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+
+// These functions are ignored because they are not marked as `pub`: `empty_raster_frame`
 
 TerminalEngine engineNew({
   required int columns,
@@ -180,4 +183,62 @@ void engineReconfigure({
 }) => RustLib.instance.api.crateApiTerminalEngineReconfigure(
   engine: engine,
   config: config,
+);
+
+/// Rust-raster present: consume damage and return RGBA + chrome (no LineUpdate
+/// mirror payload). Dart uploads `rgba` to a retained `ui.Image`.
+RasterPresentFrame engineTakeRasterPresent({required TerminalEngine engine}) =>
+    RustLib.instance.api.crateApiTerminalEngineTakeRasterPresent(
+      engine: engine,
+    );
+
+/// Full viewport Rust-raster present (resize / explicit refresh).
+RasterPresentFrame engineFullRasterPresent({required TerminalEngine engine}) =>
+    RustLib.instance.api.crateApiTerminalEngineFullRasterPresent(
+      engine: engine,
+    );
+
+/// Single FFI round-trip: parse PTY bytes then raster-present.
+Future<RasterPresentFrame> engineAdvanceAndTakeRasterPresent({
+  required TerminalEngine engine,
+  required List<int> bytes,
+}) => RustLib.instance.api.crateApiTerminalEngineAdvanceAndTakeRasterPresent(
+  engine: engine,
+  bytes: bytes,
+);
+
+Future<RasterPresentFrame> engineScrollLinesRaster({
+  required TerminalEngine engine,
+  required int delta,
+}) => RustLib.instance.api.crateApiTerminalEngineScrollLinesRaster(
+  engine: engine,
+  delta: delta,
+);
+
+Future<RasterPresentFrame> engineScrollPixelsRaster({
+  required TerminalEngine engine,
+  required double deltaPx,
+}) => RustLib.instance.api.crateApiTerminalEngineScrollPixelsRaster(
+  engine: engine,
+  deltaPx: deltaPx,
+);
+
+Future<RasterPresentFrame> engineScrollToBottomRaster({
+  required TerminalEngine engine,
+}) => RustLib.instance.api.crateApiTerminalEngineScrollToBottomRaster(
+  engine: engine,
+);
+
+Future<RasterPresentFrame> engineScrollToTopRaster({
+  required TerminalEngine engine,
+}) => RustLib.instance.api.crateApiTerminalEngineScrollToTopRaster(
+  engine: engine,
+);
+
+Future<RasterPresentFrame> engineScrollToOffsetRaster({
+  required TerminalEngine engine,
+  required double offsetLines,
+}) => RustLib.instance.api.crateApiTerminalEngineScrollToOffsetRaster(
+  engine: engine,
+  offsetLines: offsetLines,
 );

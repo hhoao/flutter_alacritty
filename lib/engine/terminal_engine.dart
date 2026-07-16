@@ -8,6 +8,7 @@ import '../render/cell_flags.dart';
 import '../render/mirror_grid.dart';
 import '../src/rust/engine.dart' show EngineConfig;
 import '../controller/terminal_search_options.dart';
+import '../src/rust/terminal_raster_present.dart';
 import 'engine_binding.dart';
 import 'terminal_engine_client.dart';
 
@@ -106,6 +107,11 @@ class TerminalEngine {
   TerminalEngineClient? _client;
   EngineBinding? _binding;
   bool _disposed = false;
+
+  /// Pending raster-present mode until [_client] exists (view may attach GPU
+  /// before the first resize binds the native engine).
+  bool _pendingRasterEnabled = false;
+  void Function(RasterPresentFrame frame)? _pendingRasterOnPresent;
 
   void Function(int columns, int rows)? _onPtyResize;
 
@@ -416,6 +422,20 @@ class TerminalEngine {
   /// which alter FLAG_SELECTED on otherwise-unchanged cells).
   void refreshView() => _client?.refreshView();
 
+  /// Enable/disable the Rust-raster present hot path (chrome-only mirror).
+  /// Selection/search still use [refreshView] for a full cell mirror.
+  void setRasterPresent({
+    required bool enabled,
+    void Function(RasterPresentFrame frame)? onPresent,
+  }) {
+    _pendingRasterEnabled = enabled;
+    _pendingRasterOnPresent = enabled ? onPresent : null;
+    final c = _client;
+    if (c == null) return;
+    c.useRasterPresent = enabled;
+    c.onRasterPresent = enabled ? onPresent : null;
+  }
+
   /// Live-apply engine-side config (scrollback, palette, semantic chars,
   /// cursor defaults, osc52) without re-spawning. Safe to call repeatedly.
   void reconfigure(TerminalConfig config) {
@@ -505,6 +525,9 @@ class TerminalEngine {
       schedule: schedule,
     );
     _client!.onPtyResize = _onPtyResize;
+    _client!.useRasterPresent = _pendingRasterEnabled;
+    _client!.onRasterPresent =
+        _pendingRasterEnabled ? _pendingRasterOnPresent : null;
     _rewireBindingCallbacks(binding);
     _drainPendingPreBind();
   }

@@ -54,11 +54,14 @@ void main() {
     expect(probes, 2);
   });
 
-  test('successful probe sets gpuReady', () async {
+  test('successful probe sets gpuReady and raster textureId -1', () async {
     final c = GpuSurfaceController(probe: () async => true);
     expect(await c.ensureAttached(), isTrue);
     expect(c.gpuReady, isTrue);
     expect(c.usePainterFallback, isFalse);
+    expect(c.textureId, -1);
+    expect(c.useRasterPresent, isTrue);
+    expect(c.shouldUseGpuSurface, isTrue);
   });
 
   test('preferGpuSurface true still probes', () async {
@@ -82,5 +85,14 @@ void main() {
     expect(await c.ensureAttached(), isFalse);
     expect(c.usePainterFallback, isTrue);
     expect(c.gpuReady, isFalse);
+  });
+
+  test('shouldUseGpuSurface false when texture would be required but raster ok',
+      () async {
+    final c = GpuSurfaceController(probe: () async => true);
+    await c.ensureAttached();
+    // MVP documents textureId < 0 as Rust-raster present, still "GPU path".
+    expect(c.shouldUseGpuSurface, isTrue);
+    expect(c.useRasterPresent, isTrue);
   });
 }

@@ -5,6 +5,7 @@ import '../render/mirror_grid.dart';
 import '../src/rust/api/terminal.dart';
 import '../src/rust/engine.dart';
 import '../src/rust/event_proxy.dart';
+import '../src/rust/terminal_raster_present.dart';
 import '../controller/terminal_search_options.dart';
 
 /// Abstracts the FRB engine calls so the client is testable without the native
@@ -64,9 +65,24 @@ abstract class RewireableEngineBinding implements EngineBinding {
   set onNotify(void Function(String)? cb);
 }
 
+/// Optional Rust-raster present surface on an [EngineBinding].
+///
+/// Implemented by [FrbEngineBinding] and test fakes that exercise the raster
+/// hot path. Kept off [EngineBinding] so existing `implements` fakes stay small.
+abstract class RasterPresentBinding {
+  Future<RasterPresentFrame> advanceAndTakeRasterPresent(Uint8List bytes);
+  RasterPresentFrame takeRasterPresent();
+  RasterPresentFrame fullRasterPresent();
+  Future<RasterPresentFrame> scrollLinesRaster(int delta);
+  Future<RasterPresentFrame> scrollPixelsRaster(double deltaPx);
+  Future<RasterPresentFrame> scrollToBottomRaster();
+  Future<RasterPresentFrame> scrollToTopRaster();
+  Future<RasterPresentFrame> scrollToOffsetRaster(double offsetLines);
+}
+
 /// FRB-backed binding. Owns the engine handle, translates FRB [RenderUpdate]
 /// into native [GridUpdate], and dispatches polled terminal→host events.
-class FrbEngineBinding implements EngineBinding {
+class FrbEngineBinding implements EngineBinding, RasterPresentBinding {
   FrbEngineBinding({
     required int columns,
     required int rows,
@@ -230,6 +246,38 @@ class FrbEngineBinding implements EngineBinding {
 
   @override
   void dispose() {}
+
+  @override
+  Future<RasterPresentFrame> advanceAndTakeRasterPresent(Uint8List bytes) async =>
+      engineAdvanceAndTakeRasterPresent(engine: _engine, bytes: bytes);
+
+  @override
+  RasterPresentFrame takeRasterPresent() =>
+      engineTakeRasterPresent(engine: _engine);
+
+  @override
+  RasterPresentFrame fullRasterPresent() =>
+      engineFullRasterPresent(engine: _engine);
+
+  @override
+  Future<RasterPresentFrame> scrollLinesRaster(int delta) async =>
+      engineScrollLinesRaster(engine: _engine, delta: delta);
+
+  @override
+  Future<RasterPresentFrame> scrollPixelsRaster(double deltaPx) async =>
+      engineScrollPixelsRaster(engine: _engine, deltaPx: deltaPx);
+
+  @override
+  Future<RasterPresentFrame> scrollToBottomRaster() async =>
+      engineScrollToBottomRaster(engine: _engine);
+
+  @override
+  Future<RasterPresentFrame> scrollToTopRaster() async =>
+      engineScrollToTopRaster(engine: _engine);
+
+  @override
+  Future<RasterPresentFrame> scrollToOffsetRaster(double offsetLines) async =>
+      engineScrollToOffsetRaster(engine: _engine, offsetLines: offsetLines);
 
   GridUpdate _toGridUpdate(RenderUpdate u) {
     // Full updates append overscan as `lines.last` with `line == screen_lines`.

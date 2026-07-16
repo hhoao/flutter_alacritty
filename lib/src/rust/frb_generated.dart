@@ -13,6 +13,7 @@ import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'terminal_raster_present.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -69,7 +70,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -2096452602;
+  int get rustContentHash => 785821047;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -91,7 +92,16 @@ abstract class RustLibApi extends BaseApi {
     required List<int> bytes,
   });
 
+  Future<RasterPresentFrame> crateApiTerminalEngineAdvanceAndTakeRasterPresent({
+    required TerminalEngine engine,
+    required List<int> bytes,
+  });
+
   void crateApiTerminalEngineClearHistory({required TerminalEngine engine});
+
+  RasterPresentFrame crateApiTerminalEngineFullRasterPresent({
+    required TerminalEngine engine,
+  });
 
   RenderUpdate crateApiTerminalEngineFullSnapshot({
     required TerminalEngine engine,
@@ -133,7 +143,17 @@ abstract class RustLibApi extends BaseApi {
     required int delta,
   });
 
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollLinesRaster({
+    required TerminalEngine engine,
+    required int delta,
+  });
+
   Future<RenderUpdate> crateApiTerminalEngineScrollPixels({
+    required TerminalEngine engine,
+    required double deltaPx,
+  });
+
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollPixelsRaster({
     required TerminalEngine engine,
     required double deltaPx,
   });
@@ -142,12 +162,25 @@ abstract class RustLibApi extends BaseApi {
     required TerminalEngine engine,
   });
 
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollToBottomRaster({
+    required TerminalEngine engine,
+  });
+
   Future<RenderUpdate> crateApiTerminalEngineScrollToOffset({
     required TerminalEngine engine,
     required double offsetLines,
   });
 
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollToOffsetRaster({
+    required TerminalEngine engine,
+    required double offsetLines,
+  });
+
   Future<RenderUpdate> crateApiTerminalEngineScrollToTop({
+    required TerminalEngine engine,
+  });
+
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollToTopRaster({
     required TerminalEngine engine,
   });
 
@@ -195,6 +228,10 @@ abstract class RustLibApi extends BaseApi {
   });
 
   List<EngineEvent> crateApiTerminalEngineTakeEvents({
+    required TerminalEngine engine,
+  });
+
+  RasterPresentFrame crateApiTerminalEngineTakeRasterPresent({
     required TerminalEngine engine,
   });
 
@@ -297,6 +334,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<RasterPresentFrame> crateApiTerminalEngineAdvanceAndTakeRasterPresent({
+    required TerminalEngine engine,
+    required List<int> bytes,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTerminalEngine(
+            engine,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(bytes, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_raster_present_frame,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTerminalEngineAdvanceAndTakeRasterPresentConstMeta,
+        argValues: [engine, bytes],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiTerminalEngineAdvanceAndTakeRasterPresentConstMeta =>
+      const TaskConstMeta(
+        debugName: "engine_advance_and_take_raster_present",
+        argNames: ["engine", "bytes"],
+      );
+
+  @override
   void crateApiTerminalEngineClearHistory({required TerminalEngine engine}) {
     return handler.executeSync(
       SyncTask(
@@ -306,7 +382,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -326,6 +402,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  RasterPresentFrame crateApiTerminalEngineFullRasterPresent({
+    required TerminalEngine engine,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTerminalEngine(
+            engine,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_raster_present_frame,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTerminalEngineFullRasterPresentConstMeta,
+        argValues: [engine],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTerminalEngineFullRasterPresentConstMeta =>
+      const TaskConstMeta(
+        debugName: "engine_full_raster_present",
+        argNames: ["engine"],
+      );
+
+  @override
   RenderUpdate crateApiTerminalEngineFullSnapshot({
     required TerminalEngine engine,
   }) {
@@ -337,7 +444,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_render_update,
@@ -368,7 +475,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_render_update,
@@ -400,7 +507,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_u_16(columns, serializer);
           sse_encode_u_16(rows, serializer);
           sse_encode_box_autoadd_engine_config(config, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -433,7 +540,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_box_autoadd_engine_config(config, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -468,7 +575,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_u_16(columns, serializer);
           sse_encode_u_16(rows, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -501,7 +608,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_u_32(id, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -534,7 +641,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(text, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -570,7 +677,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 13,
             port: port_,
           );
         },
@@ -592,6 +699,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollLinesRaster({
+    required TerminalEngine engine,
+    required int delta,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTerminalEngine(
+            engine,
+            serializer,
+          );
+          sse_encode_i_32(delta, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_raster_present_frame,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTerminalEngineScrollLinesRasterConstMeta,
+        argValues: [engine, delta],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTerminalEngineScrollLinesRasterConstMeta =>
+      const TaskConstMeta(
+        debugName: "engine_scroll_lines_raster",
+        argNames: ["engine", "delta"],
+      );
+
+  @override
   Future<RenderUpdate> crateApiTerminalEngineScrollPixels({
     required TerminalEngine engine,
     required double deltaPx,
@@ -608,7 +753,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 15,
             port: port_,
           );
         },
@@ -630,6 +775,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollPixelsRaster({
+    required TerminalEngine engine,
+    required double deltaPx,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTerminalEngine(
+            engine,
+            serializer,
+          );
+          sse_encode_f_64(deltaPx, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_raster_present_frame,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTerminalEngineScrollPixelsRasterConstMeta,
+        argValues: [engine, deltaPx],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTerminalEngineScrollPixelsRasterConstMeta =>
+      const TaskConstMeta(
+        debugName: "engine_scroll_pixels_raster",
+        argNames: ["engine", "deltaPx"],
+      );
+
+  @override
   Future<RenderUpdate> crateApiTerminalEngineScrollToBottom({
     required TerminalEngine engine,
   }) {
@@ -644,7 +827,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 17,
             port: port_,
           );
         },
@@ -666,6 +849,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollToBottomRaster({
+    required TerminalEngine engine,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTerminalEngine(
+            engine,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_raster_present_frame,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTerminalEngineScrollToBottomRasterConstMeta,
+        argValues: [engine],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTerminalEngineScrollToBottomRasterConstMeta =>
+      const TaskConstMeta(
+        debugName: "engine_scroll_to_bottom_raster",
+        argNames: ["engine"],
+      );
+
+  @override
   Future<RenderUpdate> crateApiTerminalEngineScrollToOffset({
     required TerminalEngine engine,
     required double offsetLines,
@@ -682,7 +901,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 19,
             port: port_,
           );
         },
@@ -704,6 +923,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollToOffsetRaster({
+    required TerminalEngine engine,
+    required double offsetLines,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTerminalEngine(
+            engine,
+            serializer,
+          );
+          sse_encode_f_64(offsetLines, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 20,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_raster_present_frame,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTerminalEngineScrollToOffsetRasterConstMeta,
+        argValues: [engine, offsetLines],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTerminalEngineScrollToOffsetRasterConstMeta =>
+      const TaskConstMeta(
+        debugName: "engine_scroll_to_offset_raster",
+        argNames: ["engine", "offsetLines"],
+      );
+
+  @override
   Future<RenderUpdate> crateApiTerminalEngineScrollToTop({
     required TerminalEngine engine,
   }) {
@@ -718,7 +975,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 21,
             port: port_,
           );
         },
@@ -740,6 +997,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<RasterPresentFrame> crateApiTerminalEngineScrollToTopRaster({
+    required TerminalEngine engine,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTerminalEngine(
+            engine,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 22,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_raster_present_frame,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTerminalEngineScrollToTopRasterConstMeta,
+        argValues: [engine],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTerminalEngineScrollToTopRasterConstMeta =>
+      const TaskConstMeta(
+        debugName: "engine_scroll_to_top_raster",
+        argNames: ["engine"],
+      );
+
+  @override
   void crateApiTerminalEngineSearchClear({required TerminalEngine engine}) {
     return handler.executeSync(
       SyncTask(
@@ -749,7 +1042,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -778,7 +1071,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -807,7 +1100,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -836,7 +1129,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -871,7 +1164,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_String(pattern, serializer);
           sse_encode_box_autoadd_search_options(options, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -900,7 +1193,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -939,7 +1232,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_u_16(col, serializer);
           sse_encode_bool(rightHalf, serializer);
           sse_encode_u_8(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -970,7 +1263,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -1007,7 +1300,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_i_32(displayRow, serializer);
           sse_encode_u_16(col, serializer);
           sse_encode_bool(rightHalf, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1042,7 +1335,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_u_16(width, serializer);
           sse_encode_u_16(height, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1076,7 +1369,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 33,
             port: port_,
           );
         },
@@ -1109,7 +1402,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             engine,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_engine_event,
@@ -1129,13 +1422,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  RasterPresentFrame crateApiTerminalEngineTakeRasterPresent({
+    required TerminalEngine engine,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTerminalEngine(
+            engine,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_raster_present_frame,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTerminalEngineTakeRasterPresentConstMeta,
+        argValues: [engine],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTerminalEngineTakeRasterPresentConstMeta =>
+      const TaskConstMeta(
+        debugName: "engine_take_raster_present",
+        argNames: ["engine"],
+      );
+
+  @override
   String crateApiSimpleGreet({required String name}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(name, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1160,7 +1484,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 37,
             port: port_,
           );
         },
@@ -1355,6 +1679,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  RasterPresentFrame dco_decode_raster_present_frame(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 16)
+      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
+    return RasterPresentFrame(
+      width: dco_decode_u_32(arr[0]),
+      height: dco_decode_u_32(arr[1]),
+      rgba: dco_decode_list_prim_u_8_strict(arr[2]),
+      cursorLine: dco_decode_u_32(arr[3]),
+      cursorCol: dco_decode_u_32(arr[4]),
+      cursorVisible: dco_decode_bool(arr[5]),
+      cursorShape: dco_decode_u_8(arr[6]),
+      cursorBlinking: dco_decode_bool(arr[7]),
+      modeFlags: dco_decode_u_32(arr[8]),
+      displayOffset: dco_decode_u_32(arr[9]),
+      historySize: dco_decode_u_32(arr[10]),
+      scrollFraction: dco_decode_f_64(arr[11]),
+      defaultFg: dco_decode_u_32(arr[12]),
+      defaultBg: dco_decode_u_32(arr[13]),
+      cursorColor: dco_decode_u_32(arr[14]),
+      full: dco_decode_bool(arr[15]),
+    );
   }
 
   @protected
@@ -1646,6 +1996,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     } else {
       return null;
     }
+  }
+
+  @protected
+  RasterPresentFrame sse_decode_raster_present_frame(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_width = sse_decode_u_32(deserializer);
+    var var_height = sse_decode_u_32(deserializer);
+    var var_rgba = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_cursorLine = sse_decode_u_32(deserializer);
+    var var_cursorCol = sse_decode_u_32(deserializer);
+    var var_cursorVisible = sse_decode_bool(deserializer);
+    var var_cursorShape = sse_decode_u_8(deserializer);
+    var var_cursorBlinking = sse_decode_bool(deserializer);
+    var var_modeFlags = sse_decode_u_32(deserializer);
+    var var_displayOffset = sse_decode_u_32(deserializer);
+    var var_historySize = sse_decode_u_32(deserializer);
+    var var_scrollFraction = sse_decode_f_64(deserializer);
+    var var_defaultFg = sse_decode_u_32(deserializer);
+    var var_defaultBg = sse_decode_u_32(deserializer);
+    var var_cursorColor = sse_decode_u_32(deserializer);
+    var var_full = sse_decode_bool(deserializer);
+    return RasterPresentFrame(
+      width: var_width,
+      height: var_height,
+      rgba: var_rgba,
+      cursorLine: var_cursorLine,
+      cursorCol: var_cursorCol,
+      cursorVisible: var_cursorVisible,
+      cursorShape: var_cursorShape,
+      cursorBlinking: var_cursorBlinking,
+      modeFlags: var_modeFlags,
+      displayOffset: var_displayOffset,
+      historySize: var_historySize,
+      scrollFraction: var_scrollFraction,
+      defaultFg: var_defaultFg,
+      defaultBg: var_defaultBg,
+      cursorColor: var_cursorColor,
+      full: var_full,
+    );
   }
 
   @protected
@@ -1947,6 +2338,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (self != null) {
       sse_encode_String(self, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_raster_present_frame(
+    RasterPresentFrame self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.width, serializer);
+    sse_encode_u_32(self.height, serializer);
+    sse_encode_list_prim_u_8_strict(self.rgba, serializer);
+    sse_encode_u_32(self.cursorLine, serializer);
+    sse_encode_u_32(self.cursorCol, serializer);
+    sse_encode_bool(self.cursorVisible, serializer);
+    sse_encode_u_8(self.cursorShape, serializer);
+    sse_encode_bool(self.cursorBlinking, serializer);
+    sse_encode_u_32(self.modeFlags, serializer);
+    sse_encode_u_32(self.displayOffset, serializer);
+    sse_encode_u_32(self.historySize, serializer);
+    sse_encode_f_64(self.scrollFraction, serializer);
+    sse_encode_u_32(self.defaultFg, serializer);
+    sse_encode_u_32(self.defaultBg, serializer);
+    sse_encode_u_32(self.cursorColor, serializer);
+    sse_encode_bool(self.full, serializer);
   }
 
   @protected

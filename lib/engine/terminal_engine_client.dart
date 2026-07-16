@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import '../debug/terminal_scroll_trace.dart';
 import '../input/term_mode.dart';
 import '../render/mirror_grid.dart';
+import '../src/rust/terminal_raster_present.dart';
 import '../controller/terminal_search_options.dart';
 import 'engine_binding.dart';
 
@@ -18,6 +19,7 @@ class TerminalEngineClient {
     required EngineBinding binding,
     required MirrorGrid grid,
     void Function(void Function())? schedule,
+    this.onRasterPresent,
   })  : _binding = binding,
         _grid = grid,
         _schedule = schedule ??
@@ -34,6 +36,21 @@ class TerminalEngineClient {
   EngineBinding get binding => _binding;
   final MirrorGrid _grid;
   final void Function(void Function()) _schedule;
+
+  /// When set, hot-path advances/scrolls use Rust-raster present (no full
+  /// LineUpdate mirror). Selection/search still call [refreshView].
+  void Function(RasterPresentFrame frame)? onRasterPresent;
+
+  /// When true, use raster present APIs and chrome-only mirror applies.
+  bool useRasterPresent = false;
+
+  RasterPresentBinding? get _raster {
+    final b = _binding;
+    return b is RasterPresentBinding ? b as RasterPresentBinding : null;
+  }
+
+  bool get _rasterHotPath =>
+      useRasterPresent && onRasterPresent != null && _raster != null;
 
   /// After user interaction (keys / program writes), drain ASAP via microtask
   /// for this window instead of waiting for the idle post-frame scheduler.
@@ -70,13 +87,31 @@ class TerminalEngineClient {
   /// Re-applies the current viewport. Uses [EngineBinding.searchIsActive] to
   /// pick [fullSnapshotSearched] vs [fullSnapshot] so search highlights stay
   /// in sync with the engine without a stale Dart-side search flag.
+  ///
+  /// Also used for selection/a11y/copy — always ships a full cell mirror even
+  /// when [useRasterPresent] is on.
   void refreshView() {
     if (_disposed) return;
-    final update = _binding.searchIsActive()
-        ? _binding.fullSnapshotSearched()
-        : _binding.fullSnapshot();
-    _grid.apply(update);
-    SchedulerBinding.instance.scheduleFrame();
+    if (_rasterHotPath) {
+      final frame = _raster!.fullRasterPresent();
+      _applyRasterChrome(frame);
+      onRasterPresent!(frame);
+      // Selection/search/a11y need the Dart cell mirror on demand.
+      final update = _binding.searchIsActive()
+          ? _binding.fullSnapshotSearched()
+          : _binding.fullSnapshot();
+      _grid.apply(update);
+    } else {
+      final update = _binding.searchIsActive()
+          ? _binding.fullSnapshotSearched()
+          : _binding.fullSnapshot();
+      _grid.apply(update);
+    }
+    try {
+      SchedulerBinding.instance.scheduleFrame();
+    } on Object {
+      // Headless tests without a scheduler binding.
+    }
   }
 
   bool searchSet(
@@ -137,9 +172,15 @@ class TerminalEngineClient {
       }
       if (_disposed || _buf.isEmpty) return;
       final batch = _buf.takeBytes();
-      final update = await _binding.advanceAndTakeDamage(batch);
-      if (_disposed) return;
-      _applyUpdate(update);
+      if (_rasterHotPath) {
+        final frame = await _raster!.advanceAndTakeRasterPresent(batch);
+        if (_disposed) return;
+        _applyRasterFrame(frame);
+      } else {
+        final update = await _binding.advanceAndTakeDamage(batch);
+        if (_disposed) return;
+        _applyUpdate(update);
+      }
       if (_disposed) return;
       _binding.pumpEvents(); // route PtyWrite/Title/Bell/Clipboard for this batch
     } finally {
@@ -174,6 +215,50 @@ class TerminalEngineClient {
       return;
     }
     _grid.apply(update);
+  }
+
+  /// Chrome-only mirror apply + raster upload (skips LineUpdate cell mirrors).
+  void _applyRasterFrame(RasterPresentFrame frame) {
+    if (synchronizedOutput(frame.modeFlags)) {
+      _syncOutputActive = true;
+      return;
+    }
+    if (_syncOutputActive) {
+      _syncOutputActive = false;
+      refreshView();
+      return;
+    }
+    _applyRasterChrome(frame);
+    onRasterPresent?.call(frame);
+    try {
+      SchedulerBinding.instance.scheduleFrame();
+    } on Object {
+      // Headless tests without a scheduler binding.
+    }
+  }
+
+  void _applyRasterChrome(RasterPresentFrame frame) {
+    _grid.apply(
+      GridUpdate(
+        full: false,
+        rows: 0,
+        columns: 0,
+        lines: const [],
+        cursorRow: frame.cursorLine,
+        cursorCol: frame.cursorCol,
+        cursorVisible: frame.cursorVisible,
+        cursorShape: frame.cursorShape,
+        cursorBlinking: frame.cursorBlinking,
+        modeFlags: frame.modeFlags,
+        displayOffset: frame.displayOffset,
+        historySize: frame.historySize,
+        defaultFg: frame.defaultFg,
+        defaultBg: frame.defaultBg,
+        cursorColor: frame.cursorColor,
+        scrollFraction: frame.scrollFraction,
+        scrollLineDelta: 0,
+      ),
+    );
   }
 
   void resize(int columns, int rows) {
@@ -218,7 +303,11 @@ class TerminalEngineClient {
       'client',
       'scrollLines($delta) before ${_gridPosSnapshot()}',
     );
-    _applyScrollUpdate(await _binding.scrollLines(delta));
+    if (_rasterHotPath) {
+      _applyRasterFrame(await _raster!.scrollLinesRaster(delta));
+    } else {
+      _applyScrollUpdate(await _binding.scrollLines(delta));
+    }
     TerminalScrollTrace.log(
       'client',
       'scrollLines($delta) after ${_gridPosSnapshot()}',
@@ -230,7 +319,11 @@ class TerminalEngineClient {
       'client',
       'scrollPixels(${deltaPx.toStringAsFixed(1)}) before ${_gridPosSnapshot()}',
     );
-    _applyScrollUpdate(await _binding.scrollPixels(deltaPx));
+    if (_rasterHotPath) {
+      _applyRasterFrame(await _raster!.scrollPixelsRaster(deltaPx));
+    } else {
+      _applyScrollUpdate(await _binding.scrollPixels(deltaPx));
+    }
     TerminalScrollTrace.log(
       'client',
       'scrollPixels(${deltaPx.toStringAsFixed(1)}) after ${_gridPosSnapshot()}',
@@ -242,7 +335,11 @@ class TerminalEngineClient {
       'client',
       'scrollToBottom before ${_gridPosSnapshot()}',
     );
-    _applyScrollUpdate(await _binding.scrollToBottom());
+    if (_rasterHotPath) {
+      _applyRasterFrame(await _raster!.scrollToBottomRaster());
+    } else {
+      _applyScrollUpdate(await _binding.scrollToBottom());
+    }
     TerminalScrollTrace.log(
       'client',
       'scrollToBottom after ${_gridPosSnapshot()}',
@@ -254,7 +351,11 @@ class TerminalEngineClient {
       'client',
       'scrollToTop before ${_gridPosSnapshot()}',
     );
-    _applyScrollUpdate(await _binding.scrollToTop());
+    if (_rasterHotPath) {
+      _applyRasterFrame(await _raster!.scrollToTopRaster());
+    } else {
+      _applyScrollUpdate(await _binding.scrollToTop());
+    }
     TerminalScrollTrace.log(
       'client',
       'scrollToTop after ${_gridPosSnapshot()}',
@@ -266,7 +367,11 @@ class TerminalEngineClient {
       'client',
       'scrollToOffset($offsetLines) before ${_gridPosSnapshot()}',
     );
-    _applyScrollUpdate(await _binding.scrollToOffset(offsetLines));
+    if (_rasterHotPath) {
+      _applyRasterFrame(await _raster!.scrollToOffsetRaster(offsetLines));
+    } else {
+      _applyScrollUpdate(await _binding.scrollToOffset(offsetLines));
+    }
     TerminalScrollTrace.log(
       'client',
       'scrollToOffset($offsetLines) after ${_gridPosSnapshot()}',

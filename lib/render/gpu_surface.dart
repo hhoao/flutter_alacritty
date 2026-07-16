@@ -1,15 +1,31 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 
-/// Capability probe and attach lifecycle for the GPU texture present path.
+/// Capability probe and attach lifecycle for the GPU / Rust-raster present path.
 ///
 /// [preferGpuSurface]:
-/// - `null` — auto: probe once and use GPU when available
+/// - `null` — auto: probe once and use GPU/raster when available
 /// - `true` — force attempt (still runs [probe])
 /// - `false` — force [CustomPainter] path; never probes
 ///
 /// On probe/attach failure, latches [usePainterFallback] until [retry].
-/// Task 10 wires the real Texture id; until then [gpuReady] marks a successful
-/// probe so the view can keep the painter without inventing a fake textureId.
+///
+/// ## Embedder spike (Task 10)
+///
+/// True Flutter external [Texture] registration:
+/// - **Linux:** `FlPixelBufferTexture` / `FlTextureGL` via `FlTextureRegistrar`
+///   (GTK embedder).
+/// - **macOS:** `FlutterTextureRegistry` + pixel-buffer or IOSurface texture.
+/// - **Windows:** `FlutterDesktopTextureRegistrarRegisterExternalTexture`.
+///
+/// This package's `rust_lib_flutter_alacritty` is an `ffiPlugin` (cargokit-only
+/// CMake/pod glue) with no texture-registrar hooks, and FRB does not expose
+/// `TextureRegistry`. MVP therefore uses **Rust-raster present**: Rust fills a
+/// retained RGBA pixmap; Dart uploads to `ui.Image` and draws it in a thin
+/// [CustomPaint] (skips the MirrorGrid cell paint loop). Set [textureId] only
+/// when a real external texture exists (`>= 0`); raster path keeps
+/// [textureId] at `-1` and sets [gpuReady] so [shouldUseGpuSurface] is true.
 class GpuSurfaceController {
   GpuSurfaceController({
     this.preferGpuSurface,
@@ -19,28 +35,45 @@ class GpuSurfaceController {
   /// Host preference: null=auto, true=force attempt, false=force painter.
   final bool? preferGpuSurface;
 
-  /// Returns true when the embedder can register an external texture.
+  /// Returns true when Rust-raster present (or a future Texture) can attach.
   final Future<bool> Function() probe;
 
   /// Latched after a failed probe/attach; cleared only by [retry].
   bool usePainterFallback = false;
 
-  /// True after a successful [ensureAttached] (probe passed). Task 10 uses this
-  /// to swap in [Texture]; until then the view keeps the painter.
+  /// True after a successful [ensureAttached] (probe passed).
   bool gpuReady = false;
+
+  /// External Flutter texture id when registered; `-1` means Rust-raster
+  /// `ui.Image` path (not a real [Texture] widget).
+  int textureId = -1;
 
   bool _loggedLatch = false;
 
-  /// Default probe until Rust compositor registration exists (Task 10).
-  static Future<bool> defaultProbe() async => false;
+  /// Probe: `FLUTTER_ALACRITTY_GPU=1`, or desktop VM (non-web) when the host
+  /// forced [preferGpuSurface] — see [TerminalView] custom probe. Default auto
+  /// without the env var stays false so widget tests keep the painter.
+  static Future<bool> defaultProbe() async {
+    if (kIsWeb) return false;
+    try {
+      return Platform.environment['FLUTTER_ALACRITTY_GPU'] == '1';
+    } on Object {
+      return false;
+    }
+  }
 
-  /// Whether the view should prefer the GPU texture path (not painter).
+  /// Whether the view should prefer the GPU/raster path (not cell painter).
   ///
-  /// True only when preference allows GPU, latch is clear, and attach succeeded.
+  /// True when preference allows GPU, latch is clear, and attach succeeded.
+  /// Real [Texture] requires [textureId] `>= 0`; raster path uses `-1` with
+  /// [gpuReady] and draws via [RasterPresentPainter].
   bool get shouldUseGpuSurface =>
       preferGpuSurface != false && !usePainterFallback && gpuReady;
 
-  /// Attempts attach via [probe]. Returns whether GPU path is ready.
+  /// True when using Rust-raster → `ui.Image` (not an external Texture id).
+  bool get useRasterPresent => shouldUseGpuSurface && textureId < 0;
+
+  /// Attempts attach via [probe]. Returns whether GPU/raster path is ready.
   ///
   /// Failures latch [usePainterFallback] (logged once) until [retry].
   Future<bool> ensureAttached() async {
@@ -66,6 +99,8 @@ class GpuSurfaceController {
       return false;
     }
     gpuReady = true;
+    // MVP: no TextureRegistrar — raster present uses textureId == -1.
+    textureId = -1;
     return true;
   }
 
@@ -73,12 +108,14 @@ class GpuSurfaceController {
   void retry() {
     usePainterFallback = false;
     gpuReady = false;
+    textureId = -1;
     _loggedLatch = false;
   }
 
   void _latchFallback() {
     usePainterFallback = true;
     gpuReady = false;
+    textureId = -1;
     if (!_loggedLatch) {
       _loggedLatch = true;
       debugPrint(

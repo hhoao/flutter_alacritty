@@ -127,6 +127,16 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
       GlobalKey<State<TerminalView>>();
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
+  /// `--dart-define=FLUTTER_ALACRITTY_GPU=true` forces Rust-raster present.
+  /// Runtime env `FLUTTER_ALACRITTY_GPU=1` is honored via auto probe (`null`).
+  bool? get _preferGpuSurface {
+    const define = bool.fromEnvironment(
+      'FLUTTER_ALACRITTY_GPU',
+      defaultValue: false,
+    );
+    return define ? true : null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -467,6 +477,7 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                                   milliseconds:
                                       _config.mouse.doubleClickThreshold),
                               scrollMultiplier: _config.scrolling.multiplier,
+                              preferGpuSurface: _preferGpuSurface,
                               preeditBg: _config.ime.preeditBg,
                               preeditFg: _config.ime.preeditFg,
                               preeditUnderline: _config.ime.underline,

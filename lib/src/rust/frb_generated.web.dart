@@ -14,6 +14,7 @@ import 'engine.dart';
 import 'event_proxy.dart';
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
+import 'terminal_raster_present.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -98,6 +99,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  RasterPresentFrame dco_decode_raster_present_frame(dynamic raw);
 
   @protected
   RenderUpdate dco_decode_render_update(dynamic raw);
@@ -195,6 +199,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  RasterPresentFrame sse_decode_raster_present_frame(
+    SseDeserializer deserializer,
+  );
 
   @protected
   RenderUpdate sse_decode_render_update(SseDeserializer deserializer);
@@ -313,6 +322,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_raster_present_frame(
+    RasterPresentFrame self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_render_update(RenderUpdate self, SseSerializer serializer);
