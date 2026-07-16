@@ -54,7 +54,13 @@ class GpuSurfaceController {
       return true;
     }
 
-    final ok = await probe();
+    bool ok;
+    try {
+      ok = await probe();
+    } catch (e) {
+      _latchFallback();
+      return false;
+    }
     if (!ok) {
       _latchFallback();
       return false;

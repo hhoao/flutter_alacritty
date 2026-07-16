@@ -74,4 +74,13 @@ void main() {
     expect(probes, 1);
     expect(c.usePainterFallback, isTrue);
   });
+
+  test('probe throw latches painter fallback', () async {
+    final c = GpuSurfaceController(
+      probe: () async => throw StateError('probe boom'),
+    );
+    expect(await c.ensureAttached(), isFalse);
+    expect(c.usePainterFallback, isTrue);
+    expect(c.gpuReady, isFalse);
+  });
 }
