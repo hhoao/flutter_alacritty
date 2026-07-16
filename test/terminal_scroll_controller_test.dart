@@ -532,32 +532,39 @@ void main() {
     expect(ctrl.historyScrollInFlight, isFalse);
   });
 
-  test('mouse-report trackpad pixels emit reports via TuiWheelDistance not ScrollAccumulator only', () async {
+  test('mouse-report discrete wheel: tuiScrollSensitivity multiplies TuiWheelDistance reports', () async {
     final modeFlags = kModeSgrMouse | kModeMouseClick | kModeAltScreen;
-    final pending = <void Function()>[];
-    final binding = FakeBinding()..modeFlags = modeFlags;
-    final engine = TerminalEngine.fromBinding(
-      binding,
-      config: TerminalConfig.defaults(),
-      schedule: (cb) => pending.add(cb),
-    );
-    addTearDown(engine.dispose);
-    final captured = <List<int>>[];
-    engine.output.listen((b) => captured.add(b.toList()));
 
-    final c = TerminalScrollController(
-      engine: engine,
-      cellHeight: 20,
-      scrollMultiplier: 3,
-      tuiScrollSensitivity: 1,
-    );
-    engine.refreshView();
-    c.setWheelCell(col: 1, row: 1);
-    // Two trackpad pixel events → 1 then 1 report at cellHeight 20 (1.5 + carry).
-    c.onWheelSignal(dyPx: 30, shiftHeld: false);
-    c.onWheelSignal(dyPx: 10, shiftHeld: false);
-    await drain(pending);
-    expect(captured, isNotEmpty);
-    expect(captured.expand((e) => e).length, greaterThan(0));
+    Future<int> byteCountForSensitivity(int sensitivity) async {
+      final pending = <void Function()>[];
+      final binding = FakeBinding()..modeFlags = modeFlags;
+      final engine = TerminalEngine.fromBinding(
+        binding,
+        config: TerminalConfig.defaults(),
+        schedule: (cb) => pending.add(cb),
+      );
+      addTearDown(engine.dispose);
+      final captured = <List<int>>[];
+      engine.output.listen((b) => captured.add(b.toList()));
+
+      final c = TerminalScrollController(
+        engine: engine,
+        cellHeight: 20,
+        scrollMultiplier: 3,
+        tuiScrollSensitivity: sensitivity,
+      );
+      engine.refreshView();
+      c.setWheelCell(col: 1, row: 1);
+      // ≥50px → discrete branch where sensitivity multiplies (trackpad path ignores it).
+      // Old ScrollAccumulator(multiplier:1) would emit the same count for sens 1 and 5.
+      c.onWheelSignal(dyPx: 60, shiftHeld: false);
+      await drain(pending);
+      return captured.expand((e) => e).length;
+    }
+
+    final low = await byteCountForSensitivity(1);
+    final high = await byteCountForSensitivity(5);
+    expect(low, greaterThan(0));
+    expect(high, greaterThan(low));
   });
 }

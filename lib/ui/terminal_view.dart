@@ -157,7 +157,12 @@ class TerminalView extends StatefulWidget {
   final int scrollMultiplier;
 
   /// Mouse-report TUI wheel sensitivity (1..10). Alternate-scroll still uses
-  /// [scrollMultiplier]; only the mouse-report wheel path uses this.
+  /// [scrollMultiplier].
+  ///
+  /// Applies to discrete/mouse-notch classification (large pixel deltas /
+  /// legacy wheel). Trackpad-like small pixel streams stay 1:1 and ignore this
+  /// knob (Orca parity). Flutter has no `wheelDeltaY`, so the controller treats
+  /// `abs(dy) >= 50` as a discrete notch for this purpose.
   final int tuiScrollSensitivity;
 
   /// Preedit overlay colors / underline (packed RGB, alpha forced full).

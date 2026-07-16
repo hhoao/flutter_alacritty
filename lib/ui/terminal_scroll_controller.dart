@@ -20,6 +20,11 @@ class TerminalScrollController {
     required this.engine,
     required double cellHeight,
     required int scrollMultiplier,
+    /// Mouse-report wheel sensitivity (1..10). Applies to discrete/mouse-notch
+    /// classification (large pixel deltas / legacy); trackpad-like small pixel
+    /// streams stay 1:1 and ignore this knob (Orca parity). Flutter has no
+    /// `wheelDeltaY`, so abs(dy)≥50 is treated as a discrete notch. Alternate-
+    /// scroll continues to use [scrollMultiplier].
     required int tuiScrollSensitivity,
   })  : _accumulator = ScrollAccumulator(cellHeight: cellHeight),
         _historyWheelAccumulator = ScrollAccumulator(cellHeight: cellHeight),
@@ -54,10 +59,13 @@ class TerminalScrollController {
 
   /// Rebuilds the pixel accumulator when cell metrics change (font zoom).
   /// Sub-line [ScrollAccumulator.remainderPx] is intentionally discarded.
+  /// Also resets TUI wheel carry so pending rows are not applied in stale
+  /// cell-height units.
   void updateCellHeight(double cellHeight) {
     _cancelPendingProgram();
     _accumulator = ScrollAccumulator(cellHeight: cellHeight);
     _historyWheelAccumulator = ScrollAccumulator(cellHeight: cellHeight);
+    _tuiDistance = TuiWheelDistanceState();
   }
 
   void _cancelPendingProgram() {
@@ -214,11 +222,7 @@ class TerminalScrollController {
     // carry + discrete burst); alternate-scroll keeps ScrollAccumulator + multiplier.
     if (wheelStyle && anyMouse(modeFlags)) {
       final n = resolveTuiWheelReportCount(
-        TuiWheelEvent(
-          deltaY: dyPx,
-          deltaMode: TuiWheelDeltaMode.pixel,
-          timeStampMs: _nextTuiWheelTimeMs(),
-        ),
+        _mouseReportWheelEvent(dyPx),
         multiplier: _tuiScrollSensitivity,
         state: _tuiDistance,
         cellHeight: _accumulator.cellHeight,
@@ -257,6 +261,25 @@ class TerminalScrollController {
           )
         : encodeAlternateScrollLines(lines: n, up: up);
     if (bytes.isNotEmpty) _scheduleProgramWrite(bytes);
+  }
+
+  /// Build a [TuiWheelEvent] for mouse-report wheel signals.
+  ///
+  /// Flutter [PointerScrollEvent] has no `wheelDeltaY`. Orca treats legacy-notched
+  /// wheels as discrete (where [tuiScrollSensitivity] multiplies) and pure pixel
+  /// streams as trackpad (1:1, ignore sensitivity). Approximate mouse notches as
+  /// `abs(dy) >= 50` by synthesizing a one-notch legacy delta.
+  TuiWheelEvent _mouseReportWheelEvent(double dyPx) {
+    const discretePixelMin = 50.0;
+    const legacyNotch = 120.0;
+    final absDy = dyPx.abs();
+    return TuiWheelEvent(
+      deltaY: dyPx,
+      deltaMode: TuiWheelDeltaMode.pixel,
+      timeStampMs: _nextTuiWheelTimeMs(),
+      legacyWheelDeltaY:
+          absDy >= discretePixelMin ? dyPx.sign * legacyNotch : null,
+    );
   }
 
   double _nextTuiWheelTimeMs() {
