@@ -14,5 +14,7 @@ void main() {
     expect(anyMouse(0), isFalse);
     expect(alternateScroll(kModeAlternateScroll), isTrue);
     expect(alternateScroll(0), isFalse);
+    expect(synchronizedOutput(kModeSynchronizedOutput), isTrue);
+    expect(synchronizedOutput(0), isFalse);
   });
 }

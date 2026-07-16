@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../debug/terminal_scroll_trace.dart';
+import '../input/term_mode.dart';
 import '../render/mirror_grid.dart';
 import '../controller/terminal_search_options.dart';
 import 'engine_binding.dart';
@@ -45,6 +46,10 @@ class TerminalEngineClient {
   int? _pendingColumns;
   int? _pendingRows;
   bool _disposed = false;
+
+  /// When true, DEC 2026 synchronized output is active and MirrorGrid presents
+  /// are deferred until the mode clears (then one full snapshot).
+  bool _syncOutputActive = false;
 
   /// Opens (or extends) the interactive drain window so PTY output following
   /// user input is scheduled via microtask rather than post-frame idle.
@@ -150,6 +155,17 @@ class TerminalEngineClient {
         _grid.columns > 0 &&
         update.lines.any((l) => l.codepoints.length != _grid.columns)) {
       // Engine resized before the mirror caught up — partial line width won't fit.
+      update = _binding.fullSnapshot();
+    }
+
+    // DEC 2026: hold present while synchronized output is active. Mid-sync
+    // damage is partial across advances, so on clear take one full snapshot.
+    if (synchronizedOutput(update.modeFlags)) {
+      _syncOutputActive = true;
+      return;
+    }
+    if (_syncOutputActive) {
+      _syncOutputActive = false;
       _grid.apply(_binding.fullSnapshot());
       return;
     }
