@@ -158,9 +158,31 @@ class TerminalPainter extends CustomPainter {
   final int _paintGeneration;
   final int _atlasGeneration;
 
+  /// Last [MirrorGrid.generation] consumed by [paint]. Drives dirty-row takes so
+  /// a same-generation re-paint (size change) falls back to a full row walk
+  /// instead of draining an empty dirty set.
+  int? _lastPaintedGeneration;
+
   /// Paint for the glyph atlas batch. The masks carry their own AA coverage;
   /// the 1/dpr downscale composites back ~1:1, so no filtering is needed.
   static final Paint _atlasPaint = Paint()..filterQuality = FilterQuality.none;
+
+  /// Rows to walk for bg/glyph passes. Null means paint every viewport row
+  /// (and overscan when mid-cell scrolled). Non-null is the dirty band list
+  /// from [MirrorGrid.takeDirtyRows], optionally including overscan row -1.
+  List<int>? _rowsToPaint(int rows, bool shifted) {
+    if (_lastPaintedGeneration == grid.generation) {
+      // Same generation (e.g. layout-only re-paint): redraw everything.
+      return null;
+    }
+    final dirty = grid.takeDirtyRows();
+    _lastPaintedGeneration = grid.generation;
+    // Empty (already consumed) or full coverage → full paint fallback.
+    if (dirty.isEmpty || dirty.length >= rows) return null;
+    if (!shifted) return dirty;
+    // Mid-cell scroll: always refresh the overscan sliver with dirty bands.
+    return <int>[-1, ...dirty];
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -173,25 +195,36 @@ class TerminalPainter extends CustomPainter {
     atlas?.rebuildIfNeeded();
     atlas?.beginBatch((rows + 1) * cols);
 
-    // Clear the whole layer to the default background first (like alacritty
-    // clearing the framebuffer to its bg color), so the per-cell pass can SKIP
-    // default-bg cells (P2) without depending on a host-provided background.
-    // `backgroundOpacity < 1` leaves the default-bg regions translucent so the
-    // host can show content behind a translucent terminal.
+    final willShift = grid.scrollFraction > 0;
+    final dirtyRows = _rowsToPaint(rows, willShift);
+    final paintAll = dirtyRows == null;
+
+    // Clear to default bg so the per-cell pass can SKIP default-bg cells (P2).
+    // Full paints clear the whole layer (like alacritty clearing the framebuffer);
+    // partial dirty paints clear only dirty row bands after the scroll shift below.
     final bgAlpha = (backgroundOpacity.clamp(0.0, 1.0) * 255).round();
-    if (bgAlpha > 0) {
-      canvas.drawRect(
-        Offset.zero & size,
-        Paint()
+    final clearPaint = bgAlpha > 0
+        ? (Paint()
           ..isAntiAlias = false
-          ..color = Color((bgAlpha << 24) | grid.defaultBg),
-      );
+          ..color = Color((bgAlpha << 24) | grid.defaultBg))
+        : null;
+    if (paintAll && clearPaint != null) {
+      canvas.drawRect(Offset.zero & size, clearPaint);
     }
 
     final shifted =
         _pushScrollShift(canvas, size, grid.scrollFraction, rows, cellHeight);
     // The overscan row (grid row -1) fills the sliver revealed by the shift.
     final firstRow = shifted ? -1 : 0;
+
+    if (!paintAll && clearPaint != null) {
+      for (final row in dirtyRows) {
+        canvas.drawRect(
+          Rect.fromLTWH(0, row * cellHeight, size.width, cellHeight),
+          clearPaint,
+        );
+      }
+    }
 
     // Pass 1: backgrounds (so a wide glyph isn't overwritten by the spacer's bg).
     // No anti-aliasing: cell metrics are sub-pixel (cell_metrics.dart), so AA'd
@@ -211,7 +244,7 @@ class TerminalPainter extends CustomPainter {
       ..isAntiAlias = false
       ..color = Color(selectionColor);
     final int defaultBg = grid.defaultBg;
-    for (var row = firstRow; row < rows; row++) {
+    void paintBgRow(int row) {
       final y = row * cellHeight;
       // Run-length merge: accumulate a [runStart, col) span of one color.
       var runStart = 0;
@@ -255,6 +288,16 @@ class TerminalPainter extends CustomPainter {
       flushRun(cols);
     }
 
+    if (paintAll) {
+      for (var row = firstRow; row < rows; row++) {
+        paintBgRow(row);
+      }
+    } else {
+      for (final row in dirtyRows) {
+        paintBgRow(row);
+      }
+    }
+
     // Pass 2: glyphs / geometry.
     final lineWidth = (cellHeight * 0.08).clamp(1.0, 4.0);
     final decoPaint = Paint()..strokeWidth = lineWidth;
@@ -263,7 +306,7 @@ class TerminalPainter extends CustomPainter {
     // cover a strikethrough. (a, b, packed-0x00RRGGBB).
     final decoSegments = <(Offset, Offset, int)>[];
     var needsWarmupFrame = false;
-    for (var row = firstRow; row < rows; row++) {
+    void paintGlyphRow(int row) {
       final y = row * cellHeight;
       for (var col = 0; col < cols; col++) {
         final flags = grid.flagsAt(row, col);
@@ -359,6 +402,17 @@ class TerminalPainter extends CustomPainter {
         }
       }
     }
+
+    if (paintAll) {
+      for (var row = firstRow; row < rows; row++) {
+        paintGlyphRow(row);
+      }
+    } else {
+      for (final row in dirtyRows) {
+        paintGlyphRow(row);
+      }
+    }
+
     // Emit the whole frame's glyphs in one drawRawAtlas, then the decorations
     // on top.
     atlas?.drawBatch(canvas, _atlasPaint);
