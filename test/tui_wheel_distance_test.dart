@@ -35,21 +35,27 @@ void main() {
 
   test('direction change resets pending fractional rows', () {
     final state = TuiWheelDistanceState();
-    resolveTuiWheelReportCount(
-      TuiWheelEvent(deltaY: 15, deltaMode: TuiWheelDeltaMode.pixel),
-      multiplier: 1,
-      state: state,
-      cellHeight: 20,
-    );
-    expect(state.pendingRows, greaterThan(0));
-    resolveTuiWheelReportCount(
-      TuiWheelEvent(deltaY: -1, deltaMode: TuiWheelDeltaMode.pixel),
-      multiplier: 1,
-      state: state,
-      cellHeight: 20,
-    );
-    // After opposite direction, prior remainder must not leak into new direction
+
+    // Orca fixture: fractional forward remainder must not leak into reverse.
+    // 4px / 16 = 0.25 pending; reverse -12px / 16 = 0.75 after reset → 0 reports.
+    final reports = [
+      resolveTuiWheelReportCount(
+        TuiWheelEvent(deltaY: 4, deltaMode: TuiWheelDeltaMode.pixel),
+        multiplier: 1,
+        state: state,
+        cellHeight: 16,
+      ),
+      resolveTuiWheelReportCount(
+        TuiWheelEvent(deltaY: -12, deltaMode: TuiWheelDeltaMode.pixel),
+        multiplier: 1,
+        state: state,
+        cellHeight: 16,
+      ),
+    ];
+    expect(reports, [0, 0]);
     expect(state.pendingDirection, -1);
+    // -12/16 = 0.75 only — prior 0.25 remainder was cleared on reverse.
+    expect(state.pendingRows, closeTo(0.75, 1e-9));
   });
 
   test('discrete line mode emits at least one report', () {
@@ -100,6 +106,95 @@ void main() {
       );
     }).toList();
     expect(reports, [1, 1, 3, 3, 4]);
+  });
+
+  test('uses a hotter compressed wheel distance curve for larger movements', () {
+    final state = TuiWheelDistanceState();
+    final reports = [
+      resolveTuiWheelReportCount(
+        TuiWheelEvent(
+          deltaY: 16,
+          deltaMode: TuiWheelDeltaMode.pixel,
+          legacyWheelDeltaY: -120,
+        ),
+        multiplier: 1,
+        state: state,
+        cellHeight: 16,
+      ),
+      resolveTuiWheelReportCount(
+        TuiWheelEvent(
+          deltaY: 16 * 12,
+          deltaMode: TuiWheelDeltaMode.pixel,
+          legacyWheelDeltaY: -120.0 * 12,
+        ),
+        multiplier: 1,
+        state: state,
+        cellHeight: 16,
+      ),
+    ];
+    expect(reports, [1, 6]);
+  });
+
+  test('caps a single accelerated TUI wheel event before a huge jump', () {
+    final state = TuiWheelDistanceState();
+    expect(
+      resolveTuiWheelReportCount(
+        TuiWheelEvent(
+          deltaY: 16 * 200,
+          deltaMode: TuiWheelDeltaMode.pixel,
+          legacyWheelDeltaY: -120.0 * 200,
+        ),
+        multiplier: 1,
+        state: state,
+        cellHeight: 16,
+      ),
+      6,
+    );
+  });
+
+  test('lets aggressive repeated TUI wheel events exceed the single-event cap', () {
+    final state = TuiWheelDistanceState();
+    final reports = [0.0, 16.0, 32.0, 48.0, 64.0].map((timeStampMs) {
+      return resolveTuiWheelReportCount(
+        TuiWheelEvent(
+          deltaY: 16 * 200,
+          deltaMode: TuiWheelDeltaMode.pixel,
+          legacyWheelDeltaY: -120.0 * 200,
+          timeStampMs: timeStampMs,
+        ),
+        multiplier: 1,
+        state: state,
+        cellHeight: 16,
+      );
+    }).toList();
+    expect(reports, [6, 6, 8, 8, 9]);
+  });
+
+  test('does not carry burst boost into a decaying momentum tail', () {
+    final state = TuiWheelDistanceState();
+    final inputs = <(double rows, double timeStampMs)>[
+      (200, 0),
+      (200, 16),
+      (200, 32),
+      (80, 48),
+      (20, 64),
+      (5, 80),
+    ];
+    final reports = inputs.map((input) {
+      final (rows, timeStampMs) = input;
+      return resolveTuiWheelReportCount(
+        TuiWheelEvent(
+          deltaY: 16 * rows,
+          deltaMode: TuiWheelDeltaMode.pixel,
+          legacyWheelDeltaY: -120.0 * rows,
+          timeStampMs: timeStampMs,
+        ),
+        multiplier: 1,
+        state: state,
+        cellHeight: 16,
+      );
+    }).toList();
+    expect(reports, [6, 6, 8, 6, 6, 4]);
   });
 
   test('retains fractional trackpad distance until a full row', () {

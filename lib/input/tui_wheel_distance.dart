@@ -7,18 +7,18 @@ const double _kDiscretePixelWheelDeltaMin = 50;
 const double _kLegacyMouseWheelDeltaMin = 100;
 const double _kLegacyMouseWheelDeltaUnit = 120;
 const double _kDefaultTerminalCellHeight = 16;
-const double tuiWheelAcceleratedDistanceGain = 1.6;
-const double tuiWheelBurstFullIntervalMs = 16;
-const double tuiWheelBurstMaxIntervalMs = 45;
-const double tuiWheelBurstMaxBonusRows = 3;
-const int tuiWheelBurstRampEvents = 4;
-const double tuiWheelMomentumTailDecayRatio = 0.85;
-const double tuiWheelCompressedMaxDistanceRowsPerEvent = 6;
-const double tuiWheelBurstMaxDistanceRowsPerEvent = 9;
+const double _tuiWheelAcceleratedDistanceGain = 1.6;
+const double _tuiWheelBurstFullIntervalMs = 16;
+const double _tuiWheelBurstMaxIntervalMs = 45;
+const double _tuiWheelBurstMaxBonusRows = 3;
+const int _tuiWheelBurstRampEvents = 4;
+const double _tuiWheelMomentumTailDecayRatio = 0.85;
+const double _tuiWheelCompressedMaxDistanceRowsPerEvent = 6;
+const double _tuiWheelBurstMaxDistanceRowsPerEvent = 9;
 
-const int tuiScrollSensitivityDefault = 1;
-const int tuiScrollSensitivityMin = 1;
-const int tuiScrollSensitivityMax = 10;
+const int _tuiScrollSensitivityDefault = 1;
+const int _tuiScrollSensitivityMin = 1;
+const int _tuiScrollSensitivityMax = 10;
 
 /// Mutable carry / burst state across successive TUI wheel events.
 class TuiWheelDistanceState {
@@ -32,10 +32,10 @@ class TuiWheelDistanceState {
 /// Clamp scroll sensitivity to the supported 1..10 report multiplier range.
 int normalizeTuiScrollSensitivity(num? value) {
   if (value == null || !value.isFinite) {
-    return tuiScrollSensitivityDefault;
+    return _tuiScrollSensitivityDefault;
   }
   final clamped = value
-      .clamp(tuiScrollSensitivityMin, tuiScrollSensitivityMax)
+      .clamp(_tuiScrollSensitivityMin, _tuiScrollSensitivityMax)
       .toDouble();
   return clamped.round();
 }
@@ -103,8 +103,8 @@ double _resolveWheelDistanceRows(
 double _compressWheelDistanceRows(double rows) {
   if (rows <= 1) return rows;
   return math.min(
-    tuiWheelCompressedMaxDistanceRowsPerEvent,
-    1 + math.log(rows) / math.ln2 * tuiWheelAcceleratedDistanceGain,
+    _tuiWheelCompressedMaxDistanceRowsPerEvent,
+    1 + math.log(rows) / math.ln2 * _tuiWheelAcceleratedDistanceGain,
   );
 }
 
@@ -131,27 +131,27 @@ double _resolveBurstWheelDistanceRows(
   final elapsedMs =
       state.lastInputAt == null ? null : currentInputAt - state.lastInputAt!;
   final isMomentumTail = state.lastDistanceRows != null &&
-      distanceRows < state.lastDistanceRows! * tuiWheelMomentumTailDecayRatio;
+      distanceRows < state.lastDistanceRows! * _tuiWheelMomentumTailDecayRatio;
   state.lastDistanceRows = distanceRows;
   state.lastInputAt = currentInputAt;
 
   if (isMomentumTail ||
       elapsedMs == null ||
       elapsedMs < 0 ||
-      elapsedMs > tuiWheelBurstMaxIntervalMs) {
+      elapsedMs > _tuiWheelBurstMaxIntervalMs) {
     state.fastStreak = 0;
     return 0;
   }
 
-  final cadence = elapsedMs <= tuiWheelBurstFullIntervalMs
+  final cadence = elapsedMs <= _tuiWheelBurstFullIntervalMs
       ? 1.0
-      : (tuiWheelBurstMaxIntervalMs - elapsedMs) /
-          (tuiWheelBurstMaxIntervalMs - tuiWheelBurstFullIntervalMs);
-  state.fastStreak = math.min(tuiWheelBurstRampEvents, state.fastStreak + 1);
+      : (_tuiWheelBurstMaxIntervalMs - elapsedMs) /
+          (_tuiWheelBurstMaxIntervalMs - _tuiWheelBurstFullIntervalMs);
+  state.fastStreak = math.min(_tuiWheelBurstRampEvents, state.fastStreak + 1);
 
-  return tuiWheelBurstMaxBonusRows *
+  return _tuiWheelBurstMaxBonusRows *
       cadence *
-      (state.fastStreak / tuiWheelBurstRampEvents);
+      (state.fastStreak / _tuiWheelBurstRampEvents);
 }
 
 int? _resolveTrackpadPixelWheelReportCount(
@@ -200,7 +200,7 @@ int resolveTuiWheelReportCount(
   }
 
   final scaledRows = math.min(
-        tuiWheelBurstMaxDistanceRowsPerEvent,
+        _tuiWheelBurstMaxDistanceRowsPerEvent,
         _compressWheelDistanceRows(distanceRows) +
             _resolveBurstWheelDistanceRows(event, state, distanceRows),
       ) *
