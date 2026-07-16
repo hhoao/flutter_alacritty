@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../debug/terminal_scroll_trace.dart';
 import '../render/mirror_grid.dart';
+import '../controller/terminal_search_options.dart';
 import 'engine_binding.dart';
 
 /// Coalesces PTY output per frame and feeds it to the engine off the UI thread,
@@ -55,8 +56,11 @@ class TerminalEngineClient {
     SchedulerBinding.instance.scheduleFrame();
   }
 
-  bool searchSet(String pattern) {
-    final ok = _binding.searchSet(pattern);
+  bool searchSet(
+    String pattern, {
+    TerminalSearchOptions options = const TerminalSearchOptions(),
+  }) {
+    final ok = _binding.searchSet(pattern, options: options);
     refreshView();
     return ok;
   }

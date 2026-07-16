@@ -37,7 +37,19 @@ void main() {
         columns: 20, rows: 5, config: TerminalConfig.defaults().engineConfig);
     await engineAdvanceAndTakeDamage(engine: engine, bytes: 'foofoofoo'.codeUnits);
 
-    expect(engineSearchSet(engine: engine, pattern: 'foo'), isTrue);
+    expect(
+      engineSearchSet(
+        engine: engine,
+        pattern: 'foo',
+        options: const SearchOptions(
+          caseSensitive: false,
+          wholeWord: false,
+          regex: true,
+          wrap: true,
+        ),
+      ),
+      isTrue,
+    );
     const flagCurrent = 1 << 10;
     int focusedCol(RenderUpdate u) {
       for (var c = 0; c < u.lines[0].flags.length; c++) {

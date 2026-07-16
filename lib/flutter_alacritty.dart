@@ -4,6 +4,7 @@ library;
 export 'config/config_loader.dart';
 export 'config/terminal_config.dart';
 export 'controller/terminal_controller.dart';
+export 'controller/terminal_search_options.dart';
 // `RewireableEngineBinding` is a test affordance — the production binding
 // (`FrbEngineBinding`) takes callbacks in its constructor. Hide it from the
 // public surface so consumers writing their own bindings don't think it's

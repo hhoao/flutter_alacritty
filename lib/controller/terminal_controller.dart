@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import '../engine/terminal_engine.dart';
+import 'terminal_search_options.dart';
+export 'terminal_search_options.dart';
 
 /// View-model layer between the [TerminalEngine] and the widget tree.
 ///
@@ -81,15 +83,21 @@ class TerminalController extends ChangeNotifier {
 
   String _searchPattern = '';
   bool _searchValid = true;
+  TerminalSearchOptions _searchOptions = const TerminalSearchOptions();
   String get searchPattern => _searchPattern;
   bool get searchValid => _searchValid;
+  TerminalSearchOptions get searchOptions => _searchOptions;
 
   /// Push a new pattern into the engine. Returns the engine's compile result;
   /// an empty pattern is always reported as valid (matches the UI's behavior
   /// for "no pattern → no error indicator").
-  bool searchSet(String pattern) {
+  bool searchSet(
+    String pattern, {
+    TerminalSearchOptions options = const TerminalSearchOptions(),
+  }) {
     _searchPattern = pattern;
-    final ok = _engine?.searchSet(pattern) ?? false;
+    _searchOptions = options;
+    final ok = _engine?.searchSet(pattern, options: options) ?? false;
     _searchValid = ok || pattern.isEmpty;
     notifyListeners();
     return ok;

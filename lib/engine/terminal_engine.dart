@@ -7,6 +7,7 @@ import '../config/terminal_config.dart';
 import '../render/cell_flags.dart';
 import '../render/mirror_grid.dart';
 import '../src/rust/engine.dart' show EngineConfig;
+import '../controller/terminal_search_options.dart';
 import 'engine_binding.dart';
 import 'terminal_engine_client.dart';
 
@@ -311,7 +312,11 @@ class TerminalEngine {
   }
 
   // ---- search proxies ----
-  bool searchSet(String pattern) => _client?.searchSet(pattern) ?? false;
+  bool searchSet(
+    String pattern, {
+    TerminalSearchOptions options = const TerminalSearchOptions(),
+  }) =>
+      _client?.searchSet(pattern, options: options) ?? false;
   bool searchNext() => _client?.searchNext() ?? false;
   bool searchPrev() => _client?.searchPrev() ?? false;
   void searchClear() => _client?.searchClear();

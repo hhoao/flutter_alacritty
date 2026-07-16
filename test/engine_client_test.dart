@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_alacritty/controller/terminal_search_options.dart';
 import 'package:flutter_alacritty/engine/engine_binding.dart';
 import 'package:flutter_alacritty/engine/terminal_engine_client.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
@@ -20,7 +21,10 @@ class _SearchFake implements EngineBinding {
         cursorVisible: false,
       );
   @override
-  bool searchSet(String p) {
+  bool searchSet(
+    String p, {
+    TerminalSearchOptions options = const TerminalSearchOptions(),
+  }) {
     lastSet = p;
     return true;
   }
@@ -145,7 +149,10 @@ class _SlowFakeBinding implements EngineBinding {
   @override
   String? selectionText() => null;
   @override
-  bool searchSet(String pattern) => false;
+  bool searchSet(
+    String pattern, {
+    TerminalSearchOptions options = const TerminalSearchOptions(),
+  }) => false;
   @override
   bool searchNext() => false;
   @override
@@ -225,7 +232,10 @@ class _FakeBinding implements EngineBinding {
   @override
   String? selectionText() => null;
   @override
-  bool searchSet(String pattern) => false;
+  bool searchSet(
+    String pattern, {
+    TerminalSearchOptions options = const TerminalSearchOptions(),
+  }) => false;
   @override
   bool searchNext() => false;
   @override

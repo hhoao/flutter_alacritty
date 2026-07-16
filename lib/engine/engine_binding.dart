@@ -5,6 +5,7 @@ import '../render/mirror_grid.dart';
 import '../src/rust/api/terminal.dart';
 import '../src/rust/engine.dart';
 import '../src/rust/event_proxy.dart';
+import '../controller/terminal_search_options.dart';
 
 /// Abstracts the FRB engine calls so the client is testable without the native
 /// lib. Returns native [GridUpdate]s (translation from FRB types lives in the
@@ -38,7 +39,10 @@ abstract class EngineBinding {
   void selectionUpdate(int displayRow, int col, bool rightHalf);
   void selectionClear();
   String? selectionText();
-  bool searchSet(String pattern);
+  bool searchSet(
+    String pattern, {
+    TerminalSearchOptions options = const TerminalSearchOptions(),
+  });
   bool searchNext();
   bool searchPrev();
   void searchClear();
@@ -196,8 +200,20 @@ class FrbEngineBinding implements EngineBinding {
   String? selectionText() => engineSelectionText(engine: _engine);
 
   @override
-  bool searchSet(String pattern) =>
-      engineSearchSet(engine: _engine, pattern: pattern);
+  bool searchSet(
+    String pattern, {
+    TerminalSearchOptions options = const TerminalSearchOptions(),
+  }) =>
+      engineSearchSet(
+        engine: _engine,
+        pattern: pattern,
+        options: SearchOptions(
+          caseSensitive: options.caseSensitive,
+          wholeWord: options.wholeWord,
+          regex: options.regex,
+          wrap: options.wrap,
+        ),
+      );
 
   @override
   bool searchNext() => engineSearchNext(engine: _engine);

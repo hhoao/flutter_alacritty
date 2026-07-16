@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_alacritty/config/terminal_config.dart';
+import 'package:flutter_alacritty/controller/terminal_search_options.dart';
 import 'package:flutter_alacritty/engine/engine_binding.dart';
 import 'package:flutter_alacritty/render/cell_flags.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
@@ -24,6 +25,7 @@ class FakeBinding implements RewireableEngineBinding {
   int resizeCalls = 0;
   int lastResizeCols = 0;
   int lastResizeRows = 0;
+  TerminalSearchOptions? lastSearchOptions;
 
   /// Forwarded into emitted GridUpdates so tests can flip kModeBracketedPaste
   /// etc. on the mirror grid via the existing refresh path.
@@ -249,7 +251,13 @@ class FakeBinding implements RewireableEngineBinding {
   @override
   String? selectionText() => null;
   @override
-  bool searchSet(String pattern) => pattern != '(';
+  bool searchSet(
+    String pattern, {
+    TerminalSearchOptions options = const TerminalSearchOptions(),
+  }) {
+    lastSearchOptions = options;
+    return pattern != '(';
+  }
   @override
   bool searchNext() => false;
   @override

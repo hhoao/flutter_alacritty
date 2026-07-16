@@ -102,6 +102,25 @@ void main() {
       expect(notifies, 1);
     });
 
+    test('searchSet forwards options', () {
+      controller.searchSet(
+        'foo',
+        options: const TerminalSearchOptions(caseSensitive: true, wrap: false),
+      );
+      expect(binding.lastSearchOptions?.caseSensitive, isTrue);
+      expect(binding.lastSearchOptions?.wrap, isFalse);
+      expect(binding.lastSearchOptions?.wholeWord, isFalse);
+      expect(binding.lastSearchOptions?.regex, isTrue);
+    });
+
+    test('searchSet defaults match Rust/GNOME find', () {
+      controller.searchSet('foo');
+      expect(binding.lastSearchOptions?.caseSensitive, isFalse);
+      expect(binding.lastSearchOptions?.wholeWord, isFalse);
+      expect(binding.lastSearchOptions?.regex, isTrue);
+      expect(binding.lastSearchOptions?.wrap, isTrue);
+    });
+
     test('searchSet flags invalid patterns', () {
       controller.searchSet('(');
       expect(controller.searchValid, isFalse);
