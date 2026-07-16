@@ -73,6 +73,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -104,6 +105,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -133,6 +135,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -162,6 +165,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -190,6 +194,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -219,6 +224,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -249,6 +255,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -289,6 +296,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -315,6 +323,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -341,6 +350,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 6,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
     ctrl.setWheelCell(col: 1, row: 1);
@@ -373,6 +383,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.onCancelCoalescedScroll = ctrl.cancelPendingHistory;
     engine.onDrainHistoryScroll = ctrl.drainHistoryScroll;
@@ -407,6 +418,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     wireHistoryScrollHooks(engine, ctrl);
     engine.refreshView();
@@ -443,6 +455,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     engine.refreshView();
 
@@ -473,6 +486,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     wireHistoryScrollHooks(engine, ctrl);
     engine.refreshView();
@@ -505,6 +519,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
     );
     wireHistoryScrollHooks(engine, ctrl);
     engine.refreshView();
@@ -515,5 +530,34 @@ void main() {
 
     expect(binding.scrollToBottomCalls, 1);
     expect(ctrl.historyScrollInFlight, isFalse);
+  });
+
+  test('mouse-report trackpad pixels emit reports via TuiWheelDistance not ScrollAccumulator only', () async {
+    final modeFlags = kModeSgrMouse | kModeMouseClick | kModeAltScreen;
+    final pending = <void Function()>[];
+    final binding = FakeBinding()..modeFlags = modeFlags;
+    final engine = TerminalEngine.fromBinding(
+      binding,
+      config: TerminalConfig.defaults(),
+      schedule: (cb) => pending.add(cb),
+    );
+    addTearDown(engine.dispose);
+    final captured = <List<int>>[];
+    engine.output.listen((b) => captured.add(b.toList()));
+
+    final c = TerminalScrollController(
+      engine: engine,
+      cellHeight: 20,
+      scrollMultiplier: 3,
+      tuiScrollSensitivity: 1,
+    );
+    engine.refreshView();
+    c.setWheelCell(col: 1, row: 1);
+    // Two trackpad pixel events → 1 then 1 report at cellHeight 20 (1.5 + carry).
+    c.onWheelSignal(dyPx: 30, shiftHeld: false);
+    c.onWheelSignal(dyPx: 10, shiftHeld: false);
+    await drain(pending);
+    expect(captured, isNotEmpty);
+    expect(captured.expand((e) => e).length, greaterThan(0));
   });
 }

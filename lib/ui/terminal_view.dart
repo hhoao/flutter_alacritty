@@ -105,6 +105,7 @@ class TerminalView extends StatefulWidget {
     this.bellDuration = Duration.zero,
     this.doubleClickThreshold = const Duration(milliseconds: 300),
     this.scrollMultiplier = 3,
+    this.tuiScrollSensitivity = 1,
     this.preeditBg = 0x282828,
     this.preeditFg = 0xD8D8D8,
     this.preeditUnderline = true,
@@ -154,6 +155,10 @@ class TerminalView extends StatefulWidget {
   /// wheel notch is ~3 lines of pixels, so the default reproduces alacritty's
   /// 3-lines/notch and e.g. `1` ≈ one line/notch.
   final int scrollMultiplier;
+
+  /// Mouse-report TUI wheel sensitivity (1..10). Alternate-scroll still uses
+  /// [scrollMultiplier]; only the mouse-report wheel path uses this.
+  final int tuiScrollSensitivity;
 
   /// Preedit overlay colors / underline (packed RGB, alpha forced full).
   final int preeditBg;
@@ -550,6 +555,7 @@ class TerminalViewState extends State<TerminalView>
         engine: widget.engine,
         cellHeight: _metrics.height,
         scrollMultiplier: widget.scrollMultiplier,
+        tuiScrollSensitivity: widget.tuiScrollSensitivity,
       );
 
   void _wireCoalescedScrollCancel() {

@@ -10,6 +10,8 @@ import 'package:flutter_alacritty/input/program_scroll_encoder.dart';
 import 'package:flutter_alacritty/input/scroll_accumulator.dart';
 import 'package:flutter_alacritty/input/scroll_destination.dart';
 import 'package:flutter_alacritty/input/term_mode.dart';
+import 'package:flutter_alacritty/input/tui_wheel_distance.dart';
+import 'package:flutter_alacritty/input/tui_wheel_event.dart';
 
 /// Owns scroll gesture state for [TerminalView]: pixel accumulator, routing,
 /// per-tick flush to either local history scroll or batched PTY writes.
@@ -18,15 +20,22 @@ class TerminalScrollController {
     required this.engine,
     required double cellHeight,
     required int scrollMultiplier,
+    required int tuiScrollSensitivity,
   })  : _accumulator = ScrollAccumulator(cellHeight: cellHeight),
         _historyWheelAccumulator = ScrollAccumulator(cellHeight: cellHeight),
-        _multiplier = scrollMultiplier / 3.0;
+        _multiplier = scrollMultiplier / 3.0,
+        _tuiScrollSensitivity =
+            normalizeTuiScrollSensitivity(tuiScrollSensitivity);
 
   final TerminalEngine engine;
   ScrollAccumulator _accumulator;
   /// Pixel remainder for history wheel only (Alacritty `accumulated_scroll % height`).
   ScrollAccumulator _historyWheelAccumulator;
   final double _multiplier;
+  final int _tuiScrollSensitivity;
+  TuiWheelDistanceState _tuiDistance = TuiWheelDistanceState();
+  /// Monotonic ms counter for [TuiWheelEvent.timeStampMs] when frame time is unavailable.
+  double _tuiWheelTimeMs = 0;
 
   bool _historyScheduled = false;
   bool _historyScrollInFlight = false;
@@ -121,6 +130,7 @@ class TerminalScrollController {
   void onGestureStart() {
     cancelPendingHistory();
     _accumulator.reset();
+    _tuiDistance = TuiWheelDistanceState();
   }
 
   void setWheelCell({required int col, required int row}) {
@@ -199,6 +209,34 @@ class TerminalScrollController {
     // TUI / mouse-report: accumulate pixels → whole-line PTY events.
     // Wheel ([PointerScrollEvent.scrollDelta]) and drag/pan use opposite dy
     // signs for the same user intent — same split as pre-controller pointer code.
+    //
+    // Why: mouse-report wheel uses Orca-parity TuiWheelDistance (trackpad pixel
+    // carry + discrete burst); alternate-scroll keeps ScrollAccumulator + multiplier.
+    if (wheelStyle && anyMouse(modeFlags)) {
+      final n = resolveTuiWheelReportCount(
+        TuiWheelEvent(
+          deltaY: dyPx,
+          deltaMode: TuiWheelDeltaMode.pixel,
+          timeStampMs: _nextTuiWheelTimeMs(),
+        ),
+        multiplier: _tuiScrollSensitivity,
+        state: _tuiDistance,
+        cellHeight: _accumulator.cellHeight,
+      );
+      if (n == 0) return;
+      // Flutter scrollDelta.dy > 0 is scroll-down → mouse wheel "down" (up: false).
+      final up = dyPx < 0;
+      final bytes = encodeMouseWheelLines(
+        lines: n,
+        up: up,
+        col: _wheelCol,
+        row: _wheelRow,
+        modeFlags: modeFlags,
+      );
+      if (bytes.isNotEmpty) _scheduleProgramWrite(bytes);
+      return;
+    }
+
     final programMultiplier = anyMouse(modeFlags) ? 1.0 : _multiplier;
     final signedDy = wheelStyle ? -dyPx : dyPx;
     final signedLines = _accumulator.ingest(
@@ -219,6 +257,18 @@ class TerminalScrollController {
           )
         : encodeAlternateScrollLines(lines: n, up: up);
     if (bytes.isNotEmpty) _scheduleProgramWrite(bytes);
+  }
+
+  double _nextTuiWheelTimeMs() {
+    // Why: burst/cadence math needs strictly increasing stamps; frame time is
+    // unavailable outside a Flutter frame (unit tests / idle pointer path).
+    final now = DateTime.now().millisecondsSinceEpoch.toDouble();
+    if (now > _tuiWheelTimeMs) {
+      _tuiWheelTimeMs = now;
+      return _tuiWheelTimeMs;
+    }
+    _tuiWheelTimeMs += 1;
+    return _tuiWheelTimeMs;
   }
 
   final BytesBuilder _pendingProgramBytes = BytesBuilder(copy: false);
