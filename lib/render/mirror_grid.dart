@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../debug/terminal_scroll_latency.dart';
+
 /// Sentinel [LineCells.line] on incremental scroll FFI updates (matches Rust
 /// `OVERSCAN_LINE_TAG`). Full snapshots tag overscan with `screen_lines` instead.
 const int kOverscanLineTag = 0xFFFFFFFF;
@@ -280,6 +282,7 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     _cursorVisible = true;
     _markAllRowsDirty();
     _generation++;
+    TerminalScrollLatency.markGridOrTextureUpdated(_generation);
     _notifyRepaint();
   }
 
@@ -391,6 +394,7 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     }
 
     _generation++;
+    TerminalScrollLatency.markGridOrTextureUpdated(_generation);
     _notifyRepaint();
   }
 

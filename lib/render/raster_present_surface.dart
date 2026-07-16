@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 
+import '../debug/terminal_scroll_latency.dart';
 import '../src/rust/terminal_raster_present.dart';
 
 /// Holds the retained [ui.Image] uploaded from Rust RGBA frames.
@@ -34,6 +35,7 @@ class RasterPresentSurface extends ChangeNotifier {
     _image?.dispose();
     _image = next;
     _generation++;
+    TerminalScrollLatency.markGridOrTextureUpdated(_generation);
     notifyListeners();
   }
 
@@ -43,6 +45,7 @@ class RasterPresentSurface extends ChangeNotifier {
     _image?.dispose();
     _image = image;
     _generation++;
+    TerminalScrollLatency.markGridOrTextureUpdated(_generation);
     notifyListeners();
   }
 
@@ -76,6 +79,8 @@ class RasterPresentPainter extends CustomPainter {
     );
     final dst = Offset.zero & (logicalSize == Size.zero ? size : logicalSize);
     canvas.drawImageRect(image, src, dst, Paint());
+    // Why: latency stop = first raster present after scroll-echo texture update.
+    TerminalScrollLatency.markPaintOrPresentComplete(surface.generation);
   }
 
   @override

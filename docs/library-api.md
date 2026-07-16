@@ -583,6 +583,12 @@ then applies the target position — so scrollbar drags do not race in-flight pa
 
 `scrollMultiplier` (default `3`) scales OS scroll deltas; `3` is neutral 1.0×.
 
+### Program-scroll latency measurement
+
+Locked start/stop markers and CI harness: see
+[`docs/superpowers/specs/2026-07-16-tui-scroll-latency-method.md`](superpowers/specs/2026-07-16-tui-scroll-latency-method.md)
+(`TERMINAL_SCROLL_TRACE=1` / `TerminalScrollLatency`).
+
 ## Reference example
 
 `lib/example/example_app.dart` (`ExampleTerminalApp`) wires every piece

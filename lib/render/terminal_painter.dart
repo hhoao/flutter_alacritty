@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../debug/terminal_scroll_latency.dart';
 import '../links/link_overlay.dart';
 import 'box_drawing.dart';
 import 'cell_flags.dart';
@@ -281,6 +282,8 @@ class TerminalPainter extends CustomPainter {
     // Benchmarks / one-shot renders: paint straight to the output canvas.
     if (retain == null) {
       _paintGrid(canvas, size, rows, cols, paintAll: true, dirtyRows: null);
+      // Why: latency stop = first paint after scroll-echo MirrorGrid update.
+      TerminalScrollLatency.markPaintOrPresentComplete(grid.generation);
       return;
     }
 
@@ -317,6 +320,7 @@ class TerminalPainter extends CustomPainter {
       Offset.zero & size,
       Paint()..filterQuality = FilterQuality.none,
     );
+    TerminalScrollLatency.markPaintOrPresentComplete(grid.generation);
   }
 
   void _paintGrid(

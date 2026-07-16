@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_alacritty/debug/terminal_scroll_latency.dart';
 import 'package:flutter_alacritty/debug/terminal_scroll_trace.dart';
 import 'package:flutter_alacritty/engine/terminal_engine.dart';
 import 'package:flutter_alacritty/input/program_scroll_encoder.dart';
@@ -300,6 +301,8 @@ class TerminalScrollController {
   void _scheduleProgramWrite(Uint8List bytes) {
     _pendingProgramBytes.add(bytes);
     if (_programScheduled) return;
+    // Why: latency start = first enqueue of a program-scroll batch (locked method).
+    TerminalScrollLatency.markScheduleWrite();
     _programScheduled = true;
     engine.scheduleTask(_flushProgram);
   }
