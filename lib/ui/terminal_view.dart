@@ -31,6 +31,7 @@ import 'terminal_scroll_controller.dart';
 import 'viewport_geometry.dart';
 import '../render/glyph_atlas.dart';
 import '../render/glyph_cache.dart';
+import '../render/gpu_surface.dart';
 import '../render/mirror_grid.dart';
 import '../render/terminal_painter.dart';
 import '../theme/terminal_theme.dart';
@@ -119,6 +120,7 @@ class TerminalView extends StatefulWidget {
     this.primaryTapActivatesLink = false,
     this.onBell,
     this.onPtyResize,
+    this.preferGpuSurface,
     List<TerminalLinkProvider>? linkProviders,
   })  : linkProviders = linkProviders ?? _defaultLinkProviders,
         textStyle = textStyle ?? TerminalStyle.defaults();
@@ -133,6 +135,10 @@ class TerminalView extends StatefulWidget {
   final bool autofocus;
   final MouseCursor mouseCursor;
   final bool readOnly;
+
+  /// Surface selection: `null` auto-probes, `true` forces a GPU attempt,
+  /// `false` forces the [CustomPainter] path (never probes).
+  final bool? preferGpuSurface;
 
   /// Cursor blink half-period.
   final Duration cursorBlinkInterval;
@@ -290,6 +296,8 @@ class TerminalViewState extends State<TerminalView>
   int _lastDisplayOffset = 0;
   double _lastScrollFraction = 0;
 
+  late GpuSurfaceController _gpuSurface;
+
   // The painter and UI helpers read the grid directly; the engine owns the
   // grid (single source of truth), and the view never paints before the
   // engine has been built (the host gates this with its error/exit
@@ -316,6 +324,9 @@ class TerminalViewState extends State<TerminalView>
 
   @visibleForTesting
   GlyphAtlas? get atlasForTest => _atlas;
+
+  @visibleForTesting
+  GpuSurfaceController get gpuSurfaceForTest => _gpuSurface;
 
   @visibleForTesting
   bool get isFlingingForTest => _scrollController.isFlinging;
@@ -364,6 +375,10 @@ class TerminalViewState extends State<TerminalView>
     _wireCoalescedScrollCancel();
     widget.engine.setCellPixels(_metrics.width.round(), _metrics.height.round());
     _glyphs = _newGlyphCache();
+    _gpuSurface = GpuSurfaceController(
+      preferGpuSurface: widget.preferGpuSurface,
+    );
+    unawaited(_attachGpuSurface());
     _bellCtrl = AnimationController(
       vsync: this,
       duration: widget.bellDuration > Duration.zero
@@ -500,6 +515,12 @@ class TerminalViewState extends State<TerminalView>
       }
       _refreshHoverLinkOverlay();
     }
+    if (oldWidget.preferGpuSurface != widget.preferGpuSurface) {
+      _gpuSurface = GpuSurfaceController(
+        preferGpuSurface: widget.preferGpuSurface,
+      );
+      unawaited(_attachGpuSurface());
+    }
   }
 
   /// Strut multiplier matching measured *content* height (primary-font
@@ -556,6 +577,49 @@ class TerminalViewState extends State<TerminalView>
   void _disposeAtlas() {
     _atlas?.dispose();
     _atlas = null;
+  }
+
+  /// Probes/attaches the GPU surface; rebuilds when latch or [gpuReady] changes.
+  Future<void> _attachGpuSurface() async {
+    await _gpuSurface.ensureAttached();
+    if (mounted) setState(() {});
+  }
+
+  /// Grid present widget. GPU path uses [CustomPainter] until Task 10 wires a
+  /// real texture id ([GpuSurfaceController.shouldUseGpuSurface] gates the swap).
+  Widget _buildGridPresent(Size paintSize) {
+    if (_gpuSurface.shouldUseGpuSurface) {
+      // Task 10: return Texture(textureId: …). Keep painter until a real id
+      // exists — never mount Texture(textureId: -1).
+    }
+    return RepaintBoundary(
+      child: CustomPaint(
+        size: paintSize,
+        isComplex: true,
+        willChange: true,
+        painter: TerminalPainter(
+          grid: _grid,
+          glyphs: _glyphs,
+          cellWidth: _metrics.width,
+          cellHeight: _metrics.height,
+          selectionColor: 0x55000000 | (widget.theme.selection & 0xFFFFFF),
+          searchColors: SearchColors(
+            matchBg: widget.theme.searchMatch.bg,
+            matchFg: widget.theme.searchMatch.fg,
+            focusedBg: widget.theme.searchFocused.bg,
+            focusedFg: widget.theme.searchFocused.fg,
+          ),
+          hintColors: HintColors(
+            bg: widget.theme.hintStart.bg,
+            fg: widget.theme.hintStart.fg,
+          ),
+          linkOverlay: _linkOverlay,
+          atlas: _atlas,
+          backgroundOpacity: widget.backgroundOpacity,
+          retain: _gridRetain,
+        ),
+      ),
+    );
   }
 
   TerminalScrollController _newScrollController() => TerminalScrollController(
@@ -993,35 +1057,9 @@ class TerminalViewState extends State<TerminalView>
                   // Grid layer: repaints only on grid mutation. Its own
                   // RepaintBoundary keeps its raster isolated so the cursor /
                   // bell / preedit layers above don't dirty it, and vice versa.
-                  RepaintBoundary(
-                    child: CustomPaint(
-                      size: paintSize,
-                      isComplex: true,
-                      willChange: true,
-                      painter: TerminalPainter(
-                        grid: _grid,
-                        glyphs: _glyphs,
-                        cellWidth: _metrics.width,
-                        cellHeight: _metrics.height,
-                        selectionColor:
-                            0x55000000 | (widget.theme.selection & 0xFFFFFF),
-                        searchColors: SearchColors(
-                          matchBg: widget.theme.searchMatch.bg,
-                          matchFg: widget.theme.searchMatch.fg,
-                          focusedBg: widget.theme.searchFocused.bg,
-                          focusedFg: widget.theme.searchFocused.fg,
-                        ),
-                        hintColors: HintColors(
-                          bg: widget.theme.hintStart.bg,
-                          fg: widget.theme.hintStart.fg,
-                        ),
-                        linkOverlay: _linkOverlay,
-                        atlas: _atlas,
-                        backgroundOpacity: widget.backgroundOpacity,
-                        retain: _gridRetain,
-                      ),
-                    ),
-                  ),
+                  // Task 10: when [_gpuSurface.shouldUseGpuSurface], swap
+                  // CustomPaint for Texture — never Texture(textureId: -1).
+                  _buildGridPresent(paintSize),
                   // Cursor layer: a single cell, on its own RepaintBoundary, so
                   // the blink timer re-rasters only the cursor — not the grid.
                   IgnorePointer(
