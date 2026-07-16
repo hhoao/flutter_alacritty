@@ -220,6 +220,8 @@ class TerminalEngine {
     // cheap) case where the controller is closed independently. Together they
     // make the path safe regardless of dispose order.
     if (_disposed || _outputCtl.isClosed) return;
+    // Program input → expect echo/response soon; prefer microtask drain.
+    _client?.markInteractive();
     _outputCtl.add(bytes);
   }
 
@@ -231,6 +233,8 @@ class TerminalEngine {
   /// event per scheduling tick — same hop model as scroll coalescing.
   void scheduleWrite(Uint8List bytes) {
     if (_disposed || _outputCtl.isClosed || bytes.isEmpty) return;
+    // TUI scroll / batched keys: open interactive drain window for echo.
+    _client?.markInteractive();
     _pendingWrite.add(bytes);
     if (_writeFlushScheduled) return;
     _writeFlushScheduled = true;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -33,12 +34,29 @@ class TerminalEngineClient {
   final MirrorGrid _grid;
   final void Function(void Function()) _schedule;
 
+  /// After user interaction (keys / program writes), drain ASAP via microtask
+  /// for this window instead of waiting for the idle post-frame scheduler.
+  static const interactiveWindow = Duration(milliseconds: 100);
+
   final BytesBuilder _buf = BytesBuilder(copy: false);
   bool _drainScheduled = false;
   bool _advancing = false;
+  DateTime? _interactiveUntil;
   int? _pendingColumns;
   int? _pendingRows;
   bool _disposed = false;
+
+  /// Opens (or extends) the interactive drain window so PTY output following
+  /// user input is scheduled via microtask rather than post-frame idle.
+  void markInteractive([DateTime? now]) {
+    if (_disposed) return;
+    final t = now ?? DateTime.now();
+    _interactiveUntil = t.add(interactiveWindow);
+    if (_buf.isNotEmpty) _scheduleDrain(forceImmediate: true);
+  }
+
+  bool get _isInteractive =>
+      _interactiveUntil != null && DateTime.now().isBefore(_interactiveUntil!);
 
   /// Fired only from [_flushPendingResize], after the engine reflow and mirror
   /// snapshot complete. Host wires this to `PtyBackend.resize`.
@@ -90,10 +108,14 @@ class TerminalEngineClient {
     _scheduleDrain();
   }
 
-  void _scheduleDrain() {
+  void _scheduleDrain({bool forceImmediate = false}) {
     if (_drainScheduled || _advancing) return;
     _drainScheduled = true;
-    _schedule(_drain);
+    if (forceImmediate || _isInteractive) {
+      scheduleMicrotask(_drain);
+    } else {
+      _schedule(_drain);
+    }
   }
 
   Future<void> _drain() async {
