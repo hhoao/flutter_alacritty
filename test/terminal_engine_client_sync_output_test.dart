@@ -17,6 +17,10 @@ class _SyncScriptBinding extends FakeBinding {
   final List<GridUpdate> script;
   int advanceCount = 0;
   GridUpdate? lastAdvanced;
+  bool searchActive = false;
+  int plainSnapshotCalls = 0;
+  int searchedSnapshotCalls = 0;
+  GridUpdate? searchedSnapshot;
 
   @override
   Future<GridUpdate> advanceAndTakeDamage(Uint8List bytes) async {
@@ -30,7 +34,19 @@ class _SyncScriptBinding extends FakeBinding {
 
   /// Sync-end present uses a full snapshot so mid-sync partial damage is not lost.
   @override
-  GridUpdate fullSnapshot() => lastAdvanced ?? super.fullSnapshot();
+  GridUpdate fullSnapshot() {
+    plainSnapshotCalls++;
+    return lastAdvanced ?? super.fullSnapshot();
+  }
+
+  @override
+  bool searchIsActive() => searchActive;
+
+  @override
+  GridUpdate fullSnapshotSearched() {
+    searchedSnapshotCalls++;
+    return searchedSnapshot ?? lastAdvanced ?? super.fullSnapshot();
+  }
 }
 
 GridUpdate _lineUpdate({
@@ -172,5 +188,44 @@ void main() {
     scheduled.removeAt(0)();
     await Future<void>.value();
     expect(grid.codepointAt(0, 0), '3'.codeUnitAt(0));
+  });
+
+  test('sync-end present uses searched snapshot when search is active', () async {
+    final syncOn = _lineUpdate(
+      modeFlags: kModeSynchronizedOutput,
+      codepoint: 'A'.codeUnitAt(0),
+    );
+    final syncOff = _lineUpdate(
+      modeFlags: 0,
+      codepoint: 'B'.codeUnitAt(0),
+    );
+    final highlighted = _lineUpdate(
+      modeFlags: 0,
+      codepoint: 'H'.codeUnitAt(0),
+    );
+    final binding = _SyncScriptBinding([syncOn, syncOff])
+      ..searchActive = true
+      ..searchedSnapshot = highlighted;
+    final grid = MirrorGrid();
+    grid.initializeEmpty(1, 4);
+    final scheduled = <void Function()>[];
+    final client = TerminalEngineClient(
+      binding: binding,
+      grid: grid,
+      schedule: scheduled.add,
+    );
+    addTearDown(client.dispose);
+
+    client.feed(Uint8List.fromList([1]));
+    scheduled.removeAt(0)();
+    await Future<void>.value();
+
+    client.feed(Uint8List.fromList([2]));
+    scheduled.removeAt(0)();
+    await Future<void>.value();
+
+    expect(binding.searchedSnapshotCalls, 1);
+    expect(binding.plainSnapshotCalls, 0);
+    expect(grid.codepointAt(0, 0), 'H'.codeUnitAt(0));
   });
 }

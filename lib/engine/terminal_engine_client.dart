@@ -166,7 +166,11 @@ class TerminalEngineClient {
     }
     if (_syncOutputActive) {
       _syncOutputActive = false;
-      _grid.apply(_binding.fullSnapshot());
+      // Match [refreshView]: keep search match flags when search is active.
+      final snap = _binding.searchIsActive()
+          ? _binding.fullSnapshotSearched()
+          : _binding.fullSnapshot();
+      _grid.apply(snap);
       return;
     }
     _grid.apply(update);
