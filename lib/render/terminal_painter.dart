@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -116,6 +118,56 @@ bool _pushScrollShift(
   return true;
 }
 
+/// Owns the retained grid [ui.Image] so partial dirty paints can composite over
+/// the previous frame without blanking clean rows. Held by [TerminalViewState]
+/// because [CustomPainter] has no dispose hook. Rasterized (not a nested
+/// [Picture]) so each replace flattens and does not grow a picture chain.
+class GridPaintRetain {
+  ui.Image? _image;
+  Size? _size;
+  double _scrollFraction = 0;
+  int _atlasGeneration = 0;
+  int _styleKey = 0;
+
+  ui.Image? get image => _image;
+  Size? get size => _size;
+
+  /// Whether a partial dirty paint can reuse [_image] (same size / scroll /
+  /// atlas / style). Callers must full-repaint when this is false.
+  bool canPartial({
+    required Size size,
+    required double scrollFraction,
+    required int atlasGeneration,
+    required int styleKey,
+  }) =>
+      _image != null &&
+      _size == size &&
+      _scrollFraction == scrollFraction &&
+      _atlasGeneration == atlasGeneration &&
+      _styleKey == styleKey;
+
+  void replace(
+    ui.Image image, {
+    required Size size,
+    required double scrollFraction,
+    required int atlasGeneration,
+    required int styleKey,
+  }) {
+    _image?.dispose();
+    _image = image;
+    _size = size;
+    _scrollFraction = scrollFraction;
+    _atlasGeneration = atlasGeneration;
+    _styleKey = styleKey;
+  }
+
+  void dispose() {
+    _image?.dispose();
+    _image = null;
+    _size = null;
+  }
+}
+
 /// Paints the terminal grid (backgrounds + glyphs + decorations) — everything
 /// except the cursor, which lives on its own [CursorPainter] layer so the blink
 /// timer doesn't repaint the whole grid. Repaints only on grid mutation.
@@ -131,6 +183,7 @@ class TerminalPainter extends CustomPainter {
     this.linkOverlay = LinkOverlay.empty,
     this.atlas,
     this.backgroundOpacity = 1.0,
+    this.retain,
   })  : _paintGeneration = grid.generation,
         _atlasGeneration = atlas?.generation ?? 0,
         super(repaint: grid);
@@ -155,6 +208,10 @@ class TerminalPainter extends CustomPainter {
   /// on a host-provided background behind it. < 1.0 lets whatever is behind the
   /// widget show through the default-bg regions (a translucent terminal).
   final double backgroundOpacity;
+
+  /// Retained grid picture for partial dirty paints. When null, every paint
+  /// walks all rows (benchmarks / one-shot renders).
+  final GridPaintRetain? retain;
   final int _paintGeneration;
   final int _atlasGeneration;
 
@@ -166,6 +223,16 @@ class TerminalPainter extends CustomPainter {
   /// Paint for the glyph atlas batch. The masks carry their own AA coverage;
   /// the 1/dpr downscale composites back ~1:1, so no filtering is needed.
   static final Paint _atlasPaint = Paint()..filterQuality = FilterQuality.none;
+
+  int get _styleKey => Object.hash(
+        selectionColor,
+        searchColors,
+        hintColors,
+        backgroundOpacity,
+        linkOverlay,
+        cellWidth,
+        cellHeight,
+      );
 
   /// Rows to walk for bg/glyph passes. Null means paint every viewport row
   /// (and overscan when mid-cell scrolled). Non-null is the dirty band list
@@ -197,8 +264,69 @@ class TerminalPainter extends CustomPainter {
 
     final willShift = grid.scrollFraction > 0;
     final dirtyRows = _rowsToPaint(rows, willShift);
-    final paintAll = dirtyRows == null;
+    final atlasGen = atlas?.generation ?? 0;
+    final styleKey = _styleKey;
+    final retain = this.retain;
+    // Without a reusable retained frame, skipping clean rows would blank them
+    // (CustomPainter replaces the whole picture each paint).
+    var paintAll = dirtyRows == null ||
+        retain == null ||
+        !retain.canPartial(
+          size: size,
+          scrollFraction: grid.scrollFraction,
+          atlasGeneration: atlasGen,
+          styleKey: styleKey,
+        );
 
+    // Benchmarks / one-shot renders: paint straight to the output canvas.
+    if (retain == null) {
+      _paintGrid(canvas, size, rows, cols, paintAll: true, dirtyRows: null);
+      return;
+    }
+
+    // Record into a retained image so the next partial paint can blit clean
+    // rows from the previous frame, then patch only dirty bands. Rasterizing
+    // flattens each frame (avoids a growing nested-Picture chain).
+    final recorder = ui.PictureRecorder();
+    final layer = Canvas(recorder);
+    if (!paintAll) {
+      final prev = retain.image!;
+      layer.drawImageRect(
+        prev,
+        Rect.fromLTWH(0, 0, prev.width.toDouble(), prev.height.toDouble()),
+        Offset.zero & size,
+        Paint()..filterQuality = FilterQuality.none,
+      );
+    }
+    _paintGrid(layer, size, rows, cols, paintAll: paintAll, dirtyRows: dirtyRows);
+    final picture = recorder.endRecording();
+    final w = size.width.ceil();
+    final h = size.height.ceil();
+    final image = picture.toImageSync(w, h);
+    picture.dispose();
+    retain.replace(
+      image,
+      size: size,
+      scrollFraction: grid.scrollFraction,
+      atlasGeneration: atlasGen,
+      styleKey: styleKey,
+    );
+    canvas.drawImageRect(
+      retain.image!,
+      Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+      Offset.zero & size,
+      Paint()..filterQuality = FilterQuality.none,
+    );
+  }
+
+  void _paintGrid(
+    Canvas canvas,
+    Size size,
+    int rows,
+    int cols, {
+    required bool paintAll,
+    required List<int>? dirtyRows,
+  }) {
     // Clear to default bg so the per-cell pass can SKIP default-bg cells (P2).
     // Full paints clear the whole layer (like alacritty clearing the framebuffer);
     // partial dirty paints clear only dirty row bands after the scroll shift below.
@@ -218,7 +346,7 @@ class TerminalPainter extends CustomPainter {
     final firstRow = shifted ? -1 : 0;
 
     if (!paintAll && clearPaint != null) {
-      for (final row in dirtyRows) {
+      for (final row in dirtyRows!) {
         canvas.drawRect(
           Rect.fromLTWH(0, row * cellHeight, size.width, cellHeight),
           clearPaint,
@@ -293,7 +421,7 @@ class TerminalPainter extends CustomPainter {
         paintBgRow(row);
       }
     } else {
-      for (final row in dirtyRows) {
+      for (final row in dirtyRows!) {
         paintBgRow(row);
       }
     }
@@ -306,6 +434,7 @@ class TerminalPainter extends CustomPainter {
     // cover a strikethrough. (a, b, packed-0x00RRGGBB).
     final decoSegments = <(Offset, Offset, int)>[];
     var needsWarmupFrame = false;
+    final atlas = this.atlas;
     void paintGlyphRow(int row) {
       final y = row * cellHeight;
       for (var col = 0; col < cols; col++) {
@@ -408,7 +537,7 @@ class TerminalPainter extends CustomPainter {
         paintGlyphRow(row);
       }
     } else {
-      for (final row in dirtyRows) {
+      for (final row in dirtyRows!) {
         paintGlyphRow(row);
       }
     }
@@ -433,6 +562,7 @@ class TerminalPainter extends CustomPainter {
       old._paintGeneration != _paintGeneration ||
       old._atlasGeneration != _atlasGeneration ||
       old.atlas != atlas ||
+      old.retain != retain ||
       old.cellWidth != cellWidth ||
       old.cellHeight != cellHeight ||
       old.linkOverlay != linkOverlay ||

@@ -237,6 +237,8 @@ class TerminalViewState extends State<TerminalView>
   // layer keeps using [_glyphs] (a single glyph, not worth atlasing).
   GlyphAtlas? _atlas;
   double _atlasDpr = 0;
+  // Retained grid picture so partial dirty paints keep clean-row pixels.
+  final GridPaintRetain _gridRetain = GridPaintRetain();
 
   final ValueNotifier<bool> _blinkOn = ValueNotifier(true);
   Timer? _blinkTimer;
@@ -587,6 +589,7 @@ class TerminalViewState extends State<TerminalView>
     _bellCtrl.dispose();
     _glyphs.dispose();
     _disposeAtlas();
+    _gridRetain.dispose();
     if (widget.linkProviders.isNotEmpty) {
       _grid.removeListener(_onGridLinkContextChanged);
     }
@@ -1015,6 +1018,7 @@ class TerminalViewState extends State<TerminalView>
                         linkOverlay: _linkOverlay,
                         atlas: _atlas,
                         backgroundOpacity: widget.backgroundOpacity,
+                        retain: _gridRetain,
                       ),
                     ),
                   ),

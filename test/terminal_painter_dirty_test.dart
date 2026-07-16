@@ -7,17 +7,6 @@ import 'package:flutter_alacritty/render/glyph_cache.dart';
 import 'package:flutter_alacritty/render/mirror_grid.dart';
 import 'package:flutter_alacritty/render/terminal_painter.dart';
 
-/// Records [drawRect] calls so tests can assert which row Y bands were filled.
-class _RecordingCanvas implements Canvas {
-  final List<ui.Rect> rects = [];
-
-  @override
-  void drawRect(ui.Rect rect, ui.Paint paint) => rects.add(rect);
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => null;
-}
-
 const double _cw = 8;
 const double _ch = 16;
 const int _defaultFg = 0xD8D8D8;
@@ -25,9 +14,11 @@ const int _defaultBg = 0x181818;
 const int _cols = 4;
 const int _rows = 3;
 
-/// Non-default row backgrounds so the painter emits per-row fills (default-bg
-/// cells are skipped after the layer clear).
-const List<int> _rowBg = [0x220000, 0x002200, 0x000022];
+/// Distinct non-default row backgrounds (packed 0x00RRGGBB).
+const int _row0Bg = 0xCC0000;
+const int _row1Bg = 0x00CC00;
+const int _row2Bg = 0x0000CC;
+const int _row2BgUpdated = 0x00FFFF;
 
 SearchColors get _search => const SearchColors(
       matchBg: 0xAC4242,
@@ -38,11 +29,11 @@ SearchColors get _search => const SearchColors(
 
 HintColors get _hint => const HintColors(bg: 0xF4BF75, fg: 0x181818);
 
-LineCells _coloredRow(int line, int bg, {String text = 'xxxx'}) => LineCells(
+LineCells _coloredRow(int line, int bg, {String text = '    '}) => LineCells(
       line: line,
       codepoints: Uint32List.fromList(text.codeUnits),
-      fg: Uint32List.fromList(List.filled(text.length, _defaultFg)),
       bg: Uint32List.fromList(List.filled(text.length, bg)),
+      fg: Uint32List.fromList(List.filled(text.length, _defaultFg)),
       flags: Uint16List(text.length),
     );
 
@@ -53,7 +44,9 @@ MirrorGrid _gridWithColoredRows() {
     rows: _rows,
     columns: _cols,
     lines: [
-      for (var r = 0; r < _rows; r++) _coloredRow(r, _rowBg[r]),
+      _coloredRow(0, _row0Bg),
+      _coloredRow(1, _row1Bg),
+      _coloredRow(2, _row2Bg),
     ],
     cursorRow: 0,
     cursorCol: 0,
@@ -64,7 +57,8 @@ MirrorGrid _gridWithColoredRows() {
   return grid;
 }
 
-TerminalPainter _painter(MirrorGrid grid) => TerminalPainter(
+TerminalPainter _painter(MirrorGrid grid, GridPaintRetain retain) =>
+    TerminalPainter(
       grid: grid,
       glyphs: GlyphCache(fontFamily: 'monospace', fontSize: 14, cellWidth: _cw),
       cellWidth: _cw,
@@ -72,40 +66,56 @@ TerminalPainter _painter(MirrorGrid grid) => TerminalPainter(
       selectionColor: 0x553A6EA5,
       searchColors: _search,
       hintColors: _hint,
+      retain: retain,
     );
 
-/// True if [rect] is a per-cell/row band fill whose vertical center lies in
-/// [row]'s Y range — excludes a full-layer clear covering the whole size.
-bool _isRowBandFill(ui.Rect rect, int row, {required Size size}) {
-  if (rect.width >= size.width && rect.height >= size.height) return false;
-  final centerY = rect.top + rect.height / 2;
-  return centerY >= row * _ch && centerY < (row + 1) * _ch;
+Future<ui.Image> _paintToImage(TerminalPainter painter) async {
+  const size = Size(_cols * _cw, _rows * _ch);
+  final rec = ui.PictureRecorder();
+  painter.paint(Canvas(rec), size);
+  final picture = rec.endRecording();
+  final img = await picture.toImage(size.width.ceil(), size.height.ceil());
+  picture.dispose();
+  return img;
+}
+
+/// Opaque packed 0x00RRGGBB at the center of [row]'s first cell.
+int _sampleRowBg(ByteData bytes, int row, {required int width}) {
+  final x = (_cw / 2).floor();
+  final y = (row * _ch + _ch / 2).floor();
+  final i = (y * width + x) * 4;
+  final r = bytes.getUint8(i);
+  final g = bytes.getUint8(i + 1);
+  final b = bytes.getUint8(i + 2);
+  return (r << 16) | (g << 8) | b;
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('partial update does not draw bg fills for clean rows', () {
+  test('partial dirty paint keeps clean row colors via retained picture',
+      () async {
     final grid = _gridWithColoredRows();
-    final painter = _painter(grid);
-    const size = Size(_cols * _cw, _rows * _ch);
+    final retain = GridPaintRetain();
+    addTearDown(retain.dispose);
+    final painter = _painter(grid, retain);
+    final width = (_cols * _cw).ceil();
 
-    // First paint consumes the full dirty set (all rows).
-    final first = _RecordingCanvas();
-    painter.paint(first, size);
-    expect(
-      [0, 1, 2].every(
-          (r) => first.rects.any((rect) => _isRowBandFill(rect, r, size: size))),
-      isTrue,
-      reason: 'initial full paint should fill every colored row',
-    );
+    // Full paint establishes the retained frame.
+    final firstImg = await _paintToImage(painter);
+    final firstBytes =
+        await firstImg.toByteData(format: ui.ImageByteFormat.rawRgba);
+    firstImg.dispose();
+    expect(firstBytes, isNotNull);
+    expect(_sampleRowBg(firstBytes!, 0, width: width), _row0Bg);
+    expect(_sampleRowBg(firstBytes, 2, width: width), _row2Bg);
 
-    // Partial damage: only row 1 changes (new non-default bg).
+    // Partial damage: only row 2 changes color.
     grid.apply(GridUpdate(
       full: false,
       rows: 0,
       columns: 0,
-      lines: [_coloredRow(1, 0x004400)],
+      lines: [_coloredRow(2, _row2BgUpdated)],
       cursorRow: 0,
       cursorCol: 0,
       cursorVisible: false,
@@ -113,42 +123,39 @@ void main() {
       defaultBg: _defaultBg,
     ));
 
-    final second = _RecordingCanvas();
-    painter.paint(second, size);
-
+    final secondImg = await _paintToImage(painter);
+    final secondBytes =
+        await secondImg.toByteData(format: ui.ImageByteFormat.rawRgba);
+    secondImg.dispose();
+    expect(secondBytes, isNotNull);
     expect(
-      second.rects.any((rect) => _isRowBandFill(rect, 1, size: size)),
-      isTrue,
-      reason: 'dirty row 1 must still get a bg fill',
+      _sampleRowBg(secondBytes!, 0, width: width),
+      _row0Bg,
+      reason: 'clean row 0 must survive from the retained frame',
     );
     expect(
-      second.rects.any((rect) => _isRowBandFill(rect, 0, size: size)),
-      isFalse,
-      reason: 'clean row 0 must not be filled again',
-    );
-    expect(
-      second.rects.any((rect) => _isRowBandFill(rect, 2, size: size)),
-      isFalse,
-      reason: 'clean row 2 must not be filled again',
+      _sampleRowBg(secondBytes, 2, width: width),
+      _row2BgUpdated,
+      reason: 'dirty row 2 must show the updated color',
     );
   });
 
-  test('empty dirty after take falls back to painting all rows', () {
+  test('empty dirty after take falls back to painting all rows', () async {
     final grid = _gridWithColoredRows();
-    // Simulate another consumer draining dirty before paint.
     expect(grid.takeDirtyRows(), [0, 1, 2]);
     expect(grid.takeDirtyRows(), isEmpty);
 
-    final painter = _painter(grid);
-    const size = Size(_cols * _cw, _rows * _ch);
-    final canvas = _RecordingCanvas();
-    painter.paint(canvas, size);
+    final retain = GridPaintRetain();
+    addTearDown(retain.dispose);
+    final painter = _painter(grid, retain);
+    final width = (_cols * _cw).ceil();
 
-    expect(
-      [0, 1, 2].every(
-          (r) => canvas.rects.any((rect) => _isRowBandFill(rect, r, size: size))),
-      isTrue,
-      reason: 'empty dirty set must fall back to a full row paint',
-    );
+    final img = await _paintToImage(painter);
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+    img.dispose();
+    expect(bytes, isNotNull);
+    expect(_sampleRowBg(bytes!, 0, width: width), _row0Bg);
+    expect(_sampleRowBg(bytes, 1, width: width), _row1Bg);
+    expect(_sampleRowBg(bytes, 2, width: width), _row2Bg);
   });
 }
