@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_alacritty/render/glyph_atlas.dart';
 
@@ -98,5 +100,50 @@ void main() {
     expect(atlas.rebuildIfNeeded(), isTrue);
     expect(atlas.has(0x100), isTrue);
     atlas.dispose();
+  });
+
+  test('narrow glyph keeps ink past one cell width (nerd-icon overhang)', () async {
+    // Why: Nerd Font / PUA icons are often wcwidth=1 but ~2em wide. Clipping the
+    // atlas bake to one cell (unlike Alacritty's natural-width glyph quads)
+    // shows only the left half. Slots are already 2 cells wide — use them.
+    final atlas = GlyphAtlas(
+      fontFamily: 'monospace',
+      fontSize: 14,
+      cellWidth: 4, // deliberately narrower than the glyph
+      cellHeight: 16,
+      devicePixelRatio: 1.0,
+    );
+    addTearDown(atlas.dispose);
+    final key = GlyphAtlas.keyFor('M'.codeUnitAt(0), wide: false);
+    atlas.request(key);
+    expect(atlas.rebuildIfNeeded(), isTrue);
+
+    final img = atlas.image!;
+    const slotW = 8; // 2 × cellWidth
+    const slotH = 16;
+    final bytes = await img.toByteData(format: ImageByteFormat.rawRgba);
+    expect(bytes, isNotNull);
+    final w = img.width;
+    var inkPastOneCell = false;
+    for (var y = 0; y < slotH && y < img.height; y++) {
+      for (var x = 4; x < slotW && x < w; x++) {
+        final i = (y * w + x) * 4;
+        // White mask — any channel > 0 is coverage
+        if (bytes!.getUint8(i) > 20 ||
+            bytes.getUint8(i + 1) > 20 ||
+            bytes.getUint8(i + 2) > 20 ||
+            bytes.getUint8(i + 3) > 20) {
+          inkPastOneCell = true;
+          break;
+        }
+      }
+      if (inkPastOneCell) break;
+    }
+    expect(
+      inkPastOneCell,
+      isTrue,
+      reason: 'fontSize 14 in cellWidth 4 must leave ink in the second cell '
+          'of the slot; empty right half means single-cell hard-clip',
+    );
   });
 }

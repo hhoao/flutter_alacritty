@@ -158,4 +158,66 @@ void main() {
     expect(_sampleRowBg(bytes, 1, width: width), _row1Bg);
     expect(_sampleRowBg(bytes, 2, width: width), _row2Bg);
   });
+
+  test(
+      'fractional size partial paints do not vertically compress retained content',
+      () async {
+    // Why: LayoutBuilder often yields non-integer sizes. Blitting ceil(image)
+    // into fractional Size every partial frame compounds (e.g. 39.1/40) so
+    // clean rows crush upward while dirty rows repaint in place — the prompt
+    // looks like it "rises" into scrollback while typing.
+    final grid = _gridWithColoredRows();
+    final retain = GridPaintRetain();
+    addTearDown(retain.dispose);
+    final painter = _painter(grid, retain);
+    // Content is 3*16=48px; use a short fractional viewport so drift is obvious.
+    const size = Size(32.0, 39.1);
+    final pixelW = size.width.ceil();
+    final pixelH = size.height.ceil();
+
+    void paintOnce() {
+      final rec = ui.PictureRecorder();
+      painter.paint(Canvas(rec), size);
+      rec.endRecording().dispose();
+    }
+
+    paintOnce(); // establish retain
+    expect(retain.image, isNotNull);
+    expect(retain.image!.width, pixelW);
+    expect(retain.image!.height, pixelH);
+
+    Future<int> sampleRetainY(int y) async {
+      final bytes =
+          await retain.image!.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final i = (y.clamp(0, pixelH - 1) * pixelW + 4) * 4;
+      return (bytes!.getUint8(i) << 16) |
+          (bytes.getUint8(i + 1) << 8) |
+          bytes.getUint8(i + 2);
+    }
+
+    // Mid row-1 (green). Crush from ceil-blit moves blue/dirty into this band.
+    const probeY = 24;
+    expect(await sampleRetainY(probeY), _row1Bg);
+
+    for (var i = 0; i < 200; i++) {
+      grid.apply(GridUpdate(
+        full: false,
+        rows: 0,
+        columns: 0,
+        lines: [_coloredRow(2, i.isEven ? _row2BgUpdated : _row2Bg)],
+        cursorRow: 2,
+        cursorCol: i % _cols,
+        cursorVisible: true,
+        defaultFg: _defaultFg,
+        defaultBg: _defaultBg,
+      ));
+      paintOnce();
+    }
+    expect(
+      await sampleRetainY(probeY),
+      _row1Bg,
+      reason: 'after 200 partials, y=$probeY must stay row1 green — '
+          'blue/other creeping in means retain blit scale drift',
+    );
+  });
 }

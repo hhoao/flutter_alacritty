@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../debug/terminal_scroll_trace.dart';
 import '../controller/terminal_controller.dart';
@@ -33,6 +34,9 @@ class _TerminalHistoryScrollbarState extends State<TerminalHistoryScrollbar> {
   double? _pendingPositionFraction;
   bool _scrollInFlight = false;
   int _scrollGeneration = 0;
+
+  /// Coalesce repaint-driven setState to at most once per frame.
+  bool _frameRebuildScheduled = false;
 
   @override
   void initState() {
@@ -75,7 +79,14 @@ class _TerminalHistoryScrollbarState extends State<TerminalHistoryScrollbar> {
     _lastScrollPos = scrollPos;
     _lastHistorySize = grid.historySize;
     _lastModeFlags = grid.modeFlags;
-    setState(() {});
+    // Why: wheel/TUI bursts notify many times per frame; one setState per
+    // notification rebuilds the track without moving the thumb more than once.
+    if (_frameRebuildScheduled) return;
+    _frameRebuildScheduled = true;
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      _frameRebuildScheduled = false;
+      if (mounted && !_dragging) setState(() {});
+    });
   }
 
   TerminalScrollbarGeometry _geometry(double trackHeight) {

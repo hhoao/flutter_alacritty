@@ -288,31 +288,62 @@ bool paintBoxGlyph(Canvas canvas, Rect cell, int cp, Color fg, double lineWidth)
   // sub-pixel, so AA'd edges on adjacent block cells leave half-covered seams —
   // a faint grid between cells (worst on fractional DPR / widget offset). Solid
   // pixel-aligned fills tile exactly, matching alacritty's integer-pixel
-  // `draw_rect` (builtin_font.rs). Strokes/arcs keep AA for smooth diagonals
-  // (alacritty likewise only anti-aliases its Xiaolin-Wu line drawing).
+  // `draw_rect` (builtin_font.rs). Axis-aligned LineOp/DashOp use the same
+  // no-AA rect path (plus a half-pixel overlap) so zoomed ─/│ borders do not
+  // picket-fence; diagonals/arcs keep AA for Xiaolin-Wu-style smoothness.
   final fill = Paint()
     ..style = PaintingStyle.fill
-    ..isAntiAlias = false;
+    ..isAntiAlias = false
+    ..color = fg;
+
+  void paintAxisLine(Offset a, Offset b, double width) {
+    final horizontal = (a.dy - b.dy).abs() < 1e-9;
+    final vertical = (a.dx - b.dx).abs() < 1e-9;
+    if (!horizontal && !vertical) {
+      stroke.strokeWidth = width;
+      canvas.drawLine(a, b, stroke);
+      return;
+    }
+    // Half-pixel bleed past the cell edge so neighboring cells' strokes share
+    // coverage instead of meeting on a single fractional AA sample.
+    const overlap = 0.5;
+    final half = width / 2;
+    if (horizontal) {
+      final left = a.dx < b.dx ? a.dx : b.dx;
+      final right = a.dx < b.dx ? b.dx : a.dx;
+      canvas.drawRect(
+        Rect.fromLTRB(left - overlap, a.dy - half, right + overlap, a.dy + half),
+        fill,
+      );
+    } else {
+      final top = a.dy < b.dy ? a.dy : b.dy;
+      final bottom = a.dy < b.dy ? b.dy : a.dy;
+      canvas.drawRect(
+        Rect.fromLTRB(a.dx - half, top - overlap, a.dx + half, bottom + overlap),
+        fill,
+      );
+    }
+  }
+
   for (final op in ops) {
     switch (op) {
       case LineOp(:final a, :final b, :final width):
-        stroke.strokeWidth = width;
-        canvas.drawLine(a, b, stroke);
+        paintAxisLine(a, b, width);
       case RectOp(:final rect, :final alpha):
         fill.color = fg.withValues(alpha: fg.a * alpha);
         canvas.drawRect(rect, fill);
+        fill.color = fg;
       case ArcOp(:final bounds, :final startAngle, :final sweepAngle, :final width):
         stroke.strokeWidth = width;
         canvas.drawArc(bounds, startAngle, sweepAngle, false, stroke);
       case DashOp(:final a, :final b, :final width, :final segments):
-        stroke.strokeWidth = width;
         // Each segment occupies 2/3 of its slot, leaving a 1/3 gap.
         final dx = (b.dx - a.dx) / segments;
         final dy = (b.dy - a.dy) / segments;
         for (var i = 0; i < segments; i++) {
           final s = Offset(a.dx + dx * i, a.dy + dy * i);
           final e = Offset(a.dx + dx * (i + 0.66), a.dy + dy * (i + 0.66));
-          canvas.drawLine(s, e, stroke);
+          paintAxisLine(s, e, width);
         }
     }
   }

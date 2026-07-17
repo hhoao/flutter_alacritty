@@ -118,7 +118,9 @@ class GlyphCache {
             synthesizeItalic ? ui.FontStyle.italic : ui.FontStyle.normal,
       ))
       ..addText(String.fromCharCode(codepoint));
-    final width = wide ? cellWidth * 2 : cellWidth;
+    // Always two cells: matches atlas slots and Alacritty natural-width quads.
+    // `wide` only distinguishes the cache key (CJK lead vs same cp as narrow).
+    final width = cellWidth * 2;
     final p = builder.build()..layout(ui.ParagraphConstraints(width: width));
     return p;
   }

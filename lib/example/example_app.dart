@@ -541,12 +541,13 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                       ),
                     ),
                     if (_engine != null)
-                      ListenableBuilder(
-                        listenable: _engine!.grid,
-                        builder: (context, _) => TerminalHistoryScrollbar(
-                          engine: _engine!,
-                          controller: _controller,
-                        ),
+                      // Scrollbar listens to engine.repaint itself and only
+                      // setStates when scroll/history/mode change — wrapping
+                      // ListenableBuilder(grid) rebuilt on every cell update
+                      // (822× in a scroll capture) and amplified jank.
+                      TerminalHistoryScrollbar(
+                        engine: _engine!,
+                        controller: _controller,
                       ),
                   ],
                 ),

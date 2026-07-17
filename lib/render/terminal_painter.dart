@@ -290,21 +290,31 @@ class TerminalPainter extends CustomPainter {
     // Record into a retained image so the next partial paint can blit clean
     // rows from the previous frame, then patch only dirty bands. Rasterizing
     // flattens each frame (avoids a growing nested-Picture chain).
+    //
+    // Why pixelSize (ceil): LayoutBuilder sizes are often fractional. Blitting
+    // ceil(image) → fractional Size every partial frame compounds a sub-pixel
+    // vertical scale, crushing clean rows upward while dirty rows repaint in
+    // place (typing looks like the prompt "rises" into scrollback). Keep the
+    // retain buffer 1:1 in integer pixels; scale once when presenting.
+    final w = size.width.ceil();
+    final h = size.height.ceil();
+    final pixelSize = Size(w.toDouble(), h.toDouble());
     final recorder = ui.PictureRecorder();
     final layer = Canvas(recorder);
     if (!paintAll) {
       final prev = retain.image!;
-      layer.drawImageRect(
-        prev,
-        Rect.fromLTWH(0, 0, prev.width.toDouble(), prev.height.toDouble()),
-        Offset.zero & size,
-        Paint()..filterQuality = FilterQuality.none,
-      );
+      // 1:1 pixel blit — never rescale inside the retain loop.
+      layer.drawImage(prev, Offset.zero, Paint()..filterQuality = FilterQuality.none);
     }
-    _paintGrid(layer, size, rows, cols, paintAll: paintAll, dirtyRows: dirtyRows);
+    _paintGrid(
+      layer,
+      pixelSize,
+      rows,
+      cols,
+      paintAll: paintAll,
+      dirtyRows: dirtyRows,
+    );
     final picture = recorder.endRecording();
-    final w = size.width.ceil();
-    final h = size.height.ceil();
     final image = picture.toImageSync(w, h);
     picture.dispose();
     retain.replace(
@@ -478,10 +488,10 @@ class TerminalPainter extends CustomPainter {
             final paragraph =
                 glyphs.tryGet(cp, ec.fg, bold: bold, italic: italic, wide: wide);
             if (paragraph != null) {
-              final clipW = wide ? cellWidth * 2 : cellWidth;
+              // Horizontal: up to 2 cells (Alacritty natural-width overflow for
+              // nerd icons / italics). Vertical: one cell (#5 row spill).
+              final clipW = cellWidth * 2;
               canvas.save();
-              // Hard clip (no AA on the clip edge): ink must not bleed into the
-              // next cell — Alacritty atlas/slot semantics.
               canvas.clipRect(
                 Rect.fromLTWH(col * cellWidth, y, clipW, cellHeight),
                 doAntiAlias: false,
@@ -502,7 +512,7 @@ class TerminalPainter extends CustomPainter {
           final paragraph =
               glyphs.tryGet(cp, ec.fg, bold: bold, italic: italic, wide: wide);
           if (paragraph != null) {
-            final clipW = wide ? cellWidth * 2 : cellWidth;
+            final clipW = cellWidth * 2;
             canvas.save();
             canvas.clipRect(
               Rect.fromLTWH(col * cellWidth, y, clipW, cellHeight),

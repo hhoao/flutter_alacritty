@@ -294,7 +294,8 @@ class GlyphAtlas {
     final codepoint = key >> 3;
     final bold = (key & 4) != 0;
     final italic = (key & 2) != 0;
-    final wide = (key & 1) != 0;
+    // `wide` bit still distinguishes cache keys; bake always uses the full
+    // 2-cell slot so overhanging narrow glyphs (nerd icons) stay intact.
     final family = _familyForStyle(bold: bold, italic: italic);
     final hasDedicated = (bold && italic && boldItalicFamily != null) ||
         (bold && !italic && boldFamily != null) ||
@@ -319,10 +320,13 @@ class GlyphAtlas {
         fontStyle: italic && !hasDedicated ? ui.FontStyle.italic : ui.FontStyle.normal,
       ))
       ..addText(String.fromCharCode(codepoint));
-    final layoutW = wide ? cellWidth * 2 : cellWidth;
+    final layoutW = cellWidth * 2;
     final p = builder.build()..layout(ui.ParagraphConstraints(width: layoutW));
-    // Hard-clip to the cell slot (Alacritty atlas semantics): ink must not
-    // bleed into neighboring slots when a glyph's outline exceeds the line box.
+    // Clip to the full atlas slot (always 2 cells wide × 1 cell tall).
+    // Why horizontal = 2 cells even for "narrow" keys: Alacritty draws glyphs at
+    // their natural bitmap width (may exceed one cell). Nerd Font / PUA icons are
+    // often wcwidth=1 but ~2em wide — single-cell clip shows only the left half.
+    // Vertical stays one cell so tall outlines cannot spill into the next row (#5).
     canvas.save();
     canvas.clipRect(
       ui.Rect.fromLTWH(dx, dy, layoutW, cellHeight),

@@ -127,4 +127,75 @@ void main() {
     expect(dash.a.dx, dash.b.dx); // vertical
     expect(dash.width, 1.8); // heavy
   });
+
+  test('adjacent horizontal ─ at fractional cell width has no dark seam', () async {
+    // Why: Zoom / non-integer metrics make cell edges meet on a fractional
+    // boundary. AA stroked butts leave darker samples that DPR nearest-upscale
+    // amplifies into picket-fence gaps in prompt borders.
+    const cw = 7.25;
+    const ch = 14.0;
+    const lw = 1.12;
+    const cols = 8;
+    final logicalW = cw * cols;
+    final pixelW = logicalW.ceil();
+    final pixelH = ch.ceil();
+
+    final rec = PictureRecorder();
+    final canvas = Canvas(rec);
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, pixelW.toDouble(), pixelH.toDouble()),
+      Paint()..color = const Color(0xFF181818),
+    );
+    for (var c = 0; c < cols; c++) {
+      paintBoxGlyph(
+        canvas,
+        Rect.fromLTWH(c * cw, 0, cw, ch),
+        0x2500,
+        const Color(0xFFD8D8D8),
+        lw,
+      );
+    }
+    final pic = rec.endRecording();
+    final img = pic.toImageSync(pixelW, pixelH);
+    pic.dispose();
+
+    // 2x nearest present (HiDPI / retain scale) — where seams become obvious.
+    final upRec = PictureRecorder();
+    final up = Canvas(upRec);
+    up.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, pixelW.toDouble(), pixelH.toDouble()),
+      Rect.fromLTWH(0, 0, pixelW * 2.0, pixelH * 2.0),
+      Paint()..filterQuality = FilterQuality.none,
+    );
+    final upPic = upRec.endRecording();
+    final upImg = upPic.toImageSync(pixelW * 2, pixelH * 2);
+    upPic.dispose();
+    img.dispose();
+
+    final bytes = await upImg.toByteData(format: ImageByteFormat.rawRgba);
+    final ow = upImg.width;
+    final midY = ch.floor();
+    upImg.dispose();
+    expect(bytes, isNotNull);
+
+    int rAt(int x) {
+      final i = (midY * ow + x.clamp(0, ow - 1)) * 4;
+      return bytes!.getUint8(i);
+    }
+
+    var minAtSeam = 255;
+    for (var c = 1; c < cols; c++) {
+      final x = (c * cw * 2).round();
+      for (final dx in [-1, 0, 1]) {
+        final v = rAt(x + dx);
+        if (v < minAtSeam) minAtSeam = v;
+      }
+    }
+    expect(
+      minAtSeam,
+      greaterThan(180),
+      reason: 'seam darkness $minAtSeam after 2x upscale — picket-fence gap',
+    );
+  });
 }
