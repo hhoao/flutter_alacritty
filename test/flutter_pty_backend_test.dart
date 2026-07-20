@@ -28,7 +28,11 @@ void main() {
   test('falls back to \$SHELL when program null', () {
     final spec = resolveShellSpec(const ShellConfig(),
         env: {'HOME': '/home/u', 'SHELL': '/bin/fish'});
-    expect(spec.executable, '/bin/fish');
+    if (Platform.isWindows) {
+      expect(spec.executable, 'cmd.exe');
+    } else {
+      expect(spec.executable, '/bin/fish');
+    }
     expect(spec.workingDirectory, isNull);
   });
 
@@ -39,6 +43,8 @@ void main() {
     );
     if (Platform.isAndroid) {
       expect(spec.executable, anyOf('/system/bin/sh', '/bin/sh'));
+    } else if (Platform.isWindows) {
+      expect(spec.executable, 'cmd.exe');
     } else {
       expect(spec.executable, '/bin/bash');
     }

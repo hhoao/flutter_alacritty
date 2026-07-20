@@ -154,21 +154,6 @@ double _resolveBurstWheelDistanceRows(
       (state.fastStreak / _tuiWheelBurstRampEvents);
 }
 
-int? _resolveTrackpadPixelWheelReportCount(
-  TuiWheelEvent event,
-  TuiWheelDistanceState state,
-  double distanceRows,
-) {
-  if (!_isTrackpadLikePixelWheelEvent(event)) return null;
-
-  // Why: trackpad pixel streams map 1:1 to physical distance — one report per
-  // terminal row scrolled, fractional remainder carried. No per-event cap.
-  final totalRows = state.pendingRows + distanceRows;
-  final reports = totalRows.truncate();
-  state.pendingRows = totalRows - reports;
-  return reports;
-}
-
 /// Resolve how many TUI mouse-wheel reports to emit for [event].
 ///
 /// Port of Orca `resolveTerminalTuiMouseWheelReportCount`.

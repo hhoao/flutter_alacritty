@@ -190,15 +190,16 @@ class TerminalScrollController {
     final dy = _pendingTrackpadWheelDyPx;
     _pendingTrackpadWheelDyPx = 0;
     if (dy == 0) return;
-    // Why: raw trackpad streams are 1:1 row mapping (Orca); a mild gain keeps
-    // vim/htop scrolling from feeling jumpy on high-rate Linux devices.
+    // Why: trackpad gain/forceTrackpad are for mouse-report TUI only.
+    // Alternate-scroll still uses ScrollAccumulator and must keep full dy.
+    final mouseReport = anyMouse(engine.grid.modeFlags);
     const trackpadGain = 0.85;
     _ingestDy(
-      dy * trackpadGain,
+      mouseReport ? dy * trackpadGain : dy,
       shiftHeld: _pendingTrackpadShiftHeld,
       altHeld: _pendingTrackpadAltHeld,
       wheelStyle: true,
-      forceTrackpad: true,
+      forceTrackpad: mouseReport,
     );
   }
 
