@@ -21,15 +21,21 @@ class TerminalScrollController {
     required this.engine,
     required double cellHeight,
     required int scrollMultiplier,
+    /// Orca/xterm history scrollSensitivity (default 1.15).
+    double scrollSensitivity = 1.15,
+    /// Orca/xterm fastScrollSensitivity when Alt is held (default 5).
+    double fastScrollSensitivity = 5.0,
     /// Mouse-report wheel sensitivity (1..10). Applies to discrete/mouse-notch
     /// classification (large pixel deltas / legacy); trackpad-like small pixel
     /// streams stay 1:1 and ignore this knob (Orca parity). Flutter has no
     /// `wheelDeltaY`, so abs(dy)≥50 is treated as a discrete notch. Alternate-
-    /// scroll continues to use [scrollMultiplier].
+    /// scroll continues to use [scrollMultiplier] × [scrollSensitivity].
     required int tuiScrollSensitivity,
-  })  : _accumulator = ScrollAccumulator(cellHeight: cellHeight),
+  })  : _baseMultiplier = scrollMultiplier / 3.0,
+        _scrollSensitivity = scrollSensitivity,
+        _fastScrollSensitivity = fastScrollSensitivity,
+        _accumulator = ScrollAccumulator(cellHeight: cellHeight),
         _historyWheelAccumulator = ScrollAccumulator(cellHeight: cellHeight),
-        _multiplier = scrollMultiplier / 3.0,
         _tuiScrollSensitivity =
             normalizeTuiScrollSensitivity(tuiScrollSensitivity);
 
@@ -37,7 +43,9 @@ class TerminalScrollController {
   ScrollAccumulator _accumulator;
   /// Pixel remainder for history wheel only (Alacritty `accumulated_scroll % height`).
   ScrollAccumulator _historyWheelAccumulator;
-  final double _multiplier;
+  final double _baseMultiplier;
+  final double _scrollSensitivity;
+  final double _fastScrollSensitivity;
   final int _tuiScrollSensitivity;
   TuiWheelDistanceState _tuiDistance = TuiWheelDistanceState();
   /// Monotonic ms counter for [TuiWheelEvent.timeStampMs] when frame time is unavailable.
@@ -52,6 +60,13 @@ class TerminalScrollController {
   int _wheelCol = 1;
   int _wheelRow = 1;
 
+  /// Trackpad-like wheel deltas coalesced within one microtask turn.
+  /// Discrete notches (≥50px) flush immediately so burst/sensitivity stay correct.
+  double _pendingTrackpadWheelDyPx = 0;
+  bool _trackpadWheelScheduled = false;
+  bool _pendingTrackpadShiftHeld = false;
+  bool _pendingTrackpadAltHeld = false;
+
   Ticker? _flingTicker;
   double _flingVelocity = 0;
   double _flingDecel = 0.998;
@@ -64,6 +79,7 @@ class TerminalScrollController {
   /// cell-height units.
   void updateCellHeight(double cellHeight) {
     _cancelPendingProgram();
+    _flushPendingTrackpadWheel();
     _accumulator = ScrollAccumulator(cellHeight: cellHeight);
     _historyWheelAccumulator = ScrollAccumulator(cellHeight: cellHeight);
     _tuiDistance = TuiWheelDistanceState();
@@ -147,8 +163,43 @@ class TerminalScrollController {
     _wheelRow = row;
   }
 
-  void onWheelSignal({required double dyPx, required bool shiftHeld}) {
-    _ingestDy(dyPx, shiftHeld: shiftHeld, wheelStyle: true);
+  void onWheelSignal({
+    required double dyPx,
+    required bool shiftHeld,
+    bool altHeld = false,
+  }) {
+    // Discrete / mouse-notch: keep per-event ingest (burst + sensitivity).
+    // Trackpad pixel streams: sum within the turn, one ingest — cuts handler
+    // storms without frame-rate-capping reports across turns.
+    const discretePixelMin = 50.0;
+    if (dyPx.abs() >= discretePixelMin) {
+      _flushPendingTrackpadWheel();
+      _ingestDy(dyPx, shiftHeld: shiftHeld, altHeld: altHeld, wheelStyle: true);
+      return;
+    }
+    _pendingTrackpadWheelDyPx += dyPx;
+    _pendingTrackpadShiftHeld = shiftHeld;
+    _pendingTrackpadAltHeld = altHeld;
+    if (_trackpadWheelScheduled) return;
+    _trackpadWheelScheduled = true;
+    engine.scheduleTask(_flushPendingTrackpadWheel);
+  }
+
+  void _flushPendingTrackpadWheel() {
+    _trackpadWheelScheduled = false;
+    final dy = _pendingTrackpadWheelDyPx;
+    _pendingTrackpadWheelDyPx = 0;
+    if (dy == 0) return;
+    // Why: raw trackpad streams are 1:1 row mapping (Orca); a mild gain keeps
+    // vim/htop scrolling from feeling jumpy on high-rate Linux devices.
+    const trackpadGain = 0.85;
+    _ingestDy(
+      dy * trackpadGain,
+      shiftHeld: _pendingTrackpadShiftHeld,
+      altHeld: _pendingTrackpadAltHeld,
+      wheelStyle: true,
+      forceTrackpad: true,
+    );
   }
 
   void onPanDelta({required double dyPx, required bool shiftHeld}) {
@@ -159,6 +210,8 @@ class TerminalScrollController {
     double dyPx, {
     required bool shiftHeld,
     required bool wheelStyle,
+    bool altHeld = false,
+    bool forceTrackpad = false,
   }) {
     final modeFlags = engine.grid.modeFlags;
     final dest = scrollDestination(modeFlags: modeFlags, shiftHeld: shiftHeld);
@@ -166,7 +219,10 @@ class TerminalScrollController {
     // Scrollback: wheel uses discrete lines (Alacritty `scroll_terminal` parity);
     // touch pan / fling keep sub-cell `scroll_pixels` for smooth drag.
     if (dest == ScrollDestination.history) {
-      final scaled = dyPx * _multiplier;
+      // Why: Orca/xterm use scrollSensitivity (1.15) normally and
+      // fastScrollSensitivity (5) when Alt is held.
+      final sens = altHeld ? _fastScrollSensitivity : _scrollSensitivity;
+      final scaled = dyPx * _baseMultiplier * sens;
       final signedPx = wheelStyle ? -scaled : scaled;
       if (wheelStyle) {
         final lines = _historyWheelAccumulator.ingest(
@@ -223,10 +279,11 @@ class TerminalScrollController {
     // carry + discrete burst); alternate-scroll keeps ScrollAccumulator + multiplier.
     if (wheelStyle && anyMouse(modeFlags)) {
       final n = resolveTuiWheelReportCount(
-        _mouseReportWheelEvent(dyPx),
+        _mouseReportWheelEvent(dyPx, forceTrackpad: forceTrackpad),
         multiplier: _tuiScrollSensitivity,
         state: _tuiDistance,
         cellHeight: _accumulator.cellHeight,
+        forceTrackpad: forceTrackpad,
       );
       if (n == 0) return;
       // Flutter scrollDelta.dy > 0 is scroll-down → mouse wheel "down" (up: false).
@@ -242,7 +299,8 @@ class TerminalScrollController {
       return;
     }
 
-    final programMultiplier = anyMouse(modeFlags) ? 1.0 : _multiplier;
+    final programMultiplier =
+        anyMouse(modeFlags) ? 1.0 : _baseMultiplier * _scrollSensitivity;
     final signedDy = wheelStyle ? -dyPx : dyPx;
     final signedLines = _accumulator.ingest(
       dyPx: signedDy,
@@ -270,7 +328,10 @@ class TerminalScrollController {
   /// wheels as discrete (where [tuiScrollSensitivity] multiplies) and pure pixel
   /// streams as trackpad (1:1, ignore sensitivity). Approximate mouse notches as
   /// `abs(dy) >= 50` by synthesizing a one-notch legacy delta.
-  TuiWheelEvent _mouseReportWheelEvent(double dyPx) {
+  TuiWheelEvent _mouseReportWheelEvent(
+    double dyPx, {
+    bool forceTrackpad = false,
+  }) {
     const discretePixelMin = 50.0;
     const legacyNotch = 120.0;
     final absDy = dyPx.abs();
@@ -278,8 +339,11 @@ class TerminalScrollController {
       deltaY: dyPx,
       deltaMode: TuiWheelDeltaMode.pixel,
       timeStampMs: _nextTuiWheelTimeMs(),
-      legacyWheelDeltaY:
-          absDy >= discretePixelMin ? dyPx.sign * legacyNotch : null,
+      // Batched trackpad sums can exceed the discrete pixel threshold; never
+      // synthesize a legacy notch in that path or distance compresses wrongly.
+      legacyWheelDeltaY: forceTrackpad
+          ? null
+          : (absDy >= discretePixelMin ? dyPx.sign * legacyNotch : null),
     );
   }
 

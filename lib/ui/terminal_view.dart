@@ -107,6 +107,8 @@ class TerminalView extends StatefulWidget {
     this.bellDuration = Duration.zero,
     this.doubleClickThreshold = const Duration(milliseconds: 300),
     this.scrollMultiplier = 3,
+    this.scrollSensitivity = 1.15,
+    this.fastScrollSensitivity = 5.0,
     this.tuiScrollSensitivity = 1,
     this.preeditBg = 0x282828,
     this.preeditFg = 0xD8D8D8,
@@ -157,14 +159,19 @@ class TerminalView extends StatefulWidget {
 
   /// Approximate lines scrolled per wheel notch (alacritty's
   /// `scrolling.multiplier`; default 3). History wheel uses discrete
-  /// [scrollLines]; touch pan/fling use sub-cell [scrollPixels]. The multiplier
-  /// is applied to the platform pixel delta as `scrollMultiplier / 3` — a raw
-  /// wheel notch is ~3 lines of pixels, so the default reproduces alacritty's
-  /// 3-lines/notch and e.g. `1` ≈ one line/notch.
+  /// [scrollLines]; touch pan/fling use sub-cell [scrollPixels]. Combined with
+  /// [scrollSensitivity] as `(scrollMultiplier / 3) * scrollSensitivity` so the
+  /// default matches Orca's xterm `scrollSensitivity` of 1.15.
   final int scrollMultiplier;
 
+  /// Orca/xterm `scrollSensitivity` (default 1.15) for history scroll speed.
+  final double scrollSensitivity;
+
+  /// Orca/xterm `fastScrollSensitivity` (default 5) when Alt is held on history.
+  final double fastScrollSensitivity;
+
   /// Mouse-report TUI wheel sensitivity (1..10). Alternate-scroll still uses
-  /// [scrollMultiplier].
+  /// [scrollMultiplier] / [scrollSensitivity].
   ///
   /// Applies to discrete/mouse-notch classification (large pixel deltas /
   /// legacy wheel). Trackpad-like small pixel streams stay 1:1 and ignore this
@@ -663,6 +670,8 @@ class TerminalViewState extends State<TerminalView>
         engine: widget.engine,
         cellHeight: _metrics.height,
         scrollMultiplier: widget.scrollMultiplier,
+        scrollSensitivity: widget.scrollSensitivity,
+        fastScrollSensitivity: widget.fastScrollSensitivity,
         tuiScrollSensitivity: widget.tuiScrollSensitivity,
       );
 

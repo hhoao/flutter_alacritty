@@ -73,6 +73,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -105,6 +106,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -117,6 +119,76 @@ void main() {
 
     expect(binding.scrollPixelsArgs, isNotEmpty);
     expect(binding.scrollPixelsArgs.single, closeTo(-30.0, 1e-9));
+  });
+
+  test('history: Orca scrollSensitivity 1.15 scales pan pixels', () async {
+    final binding = FakeBinding()..displayOffsetSim = 10;
+    final pending = <void Function()>[];
+    final engine = TerminalEngine.fromBinding(
+      binding,
+      config: TerminalConfig.defaults(),
+      schedule: (cb) => pending.add(cb),
+    );
+    addTearDown(engine.dispose);
+
+    final ctrl = TerminalScrollController(
+      engine: engine,
+      cellHeight: 20,
+      scrollMultiplier: 3,
+      // Default Orca/xterm scrollSensitivity.
+      scrollSensitivity: 1.15,
+      tuiScrollSensitivity: 1,
+    );
+    engine.refreshView();
+
+    ctrl.onPanDelta(dyPx: -30, shiftHeld: false);
+    while (pending.isNotEmpty) {
+      pending.removeAt(0)();
+    }
+    await Future<void>.value();
+
+    expect(binding.scrollPixelsArgs.single, closeTo(-34.5, 1e-9));
+  });
+
+  test('history: Alt uses fastScrollSensitivity like xterm', () async {
+    final binding = FakeBinding()..displayOffsetSim = 50;
+    final pending = <void Function()>[];
+    final engine = TerminalEngine.fromBinding(
+      binding,
+      config: TerminalConfig.defaults(),
+      schedule: (cb) => pending.add(cb),
+    );
+    addTearDown(engine.dispose);
+
+    final ctrl = TerminalScrollController(
+      engine: engine,
+      cellHeight: 20,
+      scrollMultiplier: 3,
+      scrollSensitivity: 1.15,
+      fastScrollSensitivity: 5.0,
+      tuiScrollSensitivity: 1,
+    );
+    engine.refreshView();
+
+    // Discrete notch so it isn't trackpad-batched; Alt → fast sensitivity 5.
+    ctrl.onWheelSignal(dyPx: 60, shiftHeld: false, altHeld: true);
+    while (pending.isNotEmpty) {
+      pending.removeAt(0)();
+    }
+    await Future<void>.value();
+
+    // wheel negates: signedPx = -(60 * 1.0 * 5) = -300 → history lines path
+    // uses wheel accumulator; just assert scroll happened with fast scale.
+    expect(
+      binding.scrollLinesArgs.isNotEmpty || binding.scrollPixelsArgs.isNotEmpty,
+      isTrue,
+    );
+    if (binding.scrollPixelsArgs.isNotEmpty) {
+      expect(binding.scrollPixelsArgs.single.abs(), closeTo(300.0, 1e-6));
+    } else {
+      // Discrete wheel → scrollLines; 300px / 20 cell = 15 lines.
+      expect(binding.scrollLinesArgs.single.abs(), 15);
+    }
   });
 
   test('history: multiple pan deltas in one frame coalesce px', () async {
@@ -135,6 +207,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -165,6 +238,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -194,6 +268,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -224,6 +299,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -255,6 +331,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -296,6 +373,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -323,6 +401,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -350,6 +429,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 6,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -383,6 +463,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.onCancelCoalescedScroll = ctrl.cancelPendingHistory;
@@ -418,6 +499,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     wireHistoryScrollHooks(engine, ctrl);
@@ -455,6 +537,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     engine.refreshView();
@@ -486,6 +569,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     wireHistoryScrollHooks(engine, ctrl);
@@ -519,6 +603,7 @@ void main() {
       engine: engine,
       cellHeight: 20,
       scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
       tuiScrollSensitivity: 1,
     );
     wireHistoryScrollHooks(engine, ctrl);
@@ -551,6 +636,7 @@ void main() {
         engine: engine,
         cellHeight: 20,
         scrollMultiplier: 3,
+      scrollSensitivity: 1.0,
         tuiScrollSensitivity: sensitivity,
       );
       engine.refreshView();

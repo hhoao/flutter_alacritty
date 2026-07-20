@@ -477,6 +477,13 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                                   milliseconds:
                                       _config.mouse.doubleClickThreshold),
                               scrollMultiplier: _config.scrolling.multiplier,
+                              // Slightly slower than Orca's 1.15 default for a
+                              // calmer wheel feel while tuning scroll perf.
+                              scrollSensitivity:
+                                  _config.scrolling.sensitivity * 0.85,
+                              fastScrollSensitivity:
+                                  _config.scrolling.fastSensitivity,
+                              tuiScrollSensitivity: 1,
                               preferGpuSurface: _preferGpuSurface,
                               preeditBg: _config.ime.preeditBg,
                               preeditFg: _config.ime.preeditFg,

@@ -49,7 +49,9 @@ blink_interval = 530   # ms
 
 [scrolling]
 history = 10000
-multiplier = 3         # lines per wheel notch
+multiplier = 3         # lines per wheel notch (alacritty); pixel scale = multiplier/3
+sensitivity = 1.15     # Orca/xterm scrollSensitivity (history wheel/pan)
+fast_sensitivity = 5   # Orca/xterm fastScrollSensitivity (Alt+wheel history)
 
 [mouse]
 double_click_threshold = 300   # ms

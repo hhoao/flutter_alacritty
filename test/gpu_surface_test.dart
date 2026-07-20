@@ -3,12 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_alacritty/render/gpu_surface.dart';
 
 void main() {
-  test('GpuSurfaceController latches painter fallback after attach failure',
-      () async {
+  test('auto soft probe decline does not latch painter fallback', () async {
     final c = GpuSurfaceController(probe: () async => false);
     expect(await c.ensureAttached(), isFalse);
-    expect(c.usePainterFallback, isTrue);
+    expect(c.usePainterFallback, isFalse);
     expect(c.gpuReady, isFalse);
+    // Soft decline stays retryable without retry().
+    expect(await c.ensureAttached(), isFalse);
+    expect(c.usePainterFallback, isFalse);
   });
 
   test('preferGpuSurface false never probes', () async {
@@ -26,10 +28,11 @@ void main() {
     expect(c.usePainterFallback, isFalse);
   });
 
-  test('retry clears latch and re-probes', () async {
+  test('retry clears latch and re-probes after forced failure', () async {
     var probes = 0;
     final results = <bool>[false, true];
     final c = GpuSurfaceController(
+      preferGpuSurface: true,
       probe: () async {
         final i = probes++;
         return results[i];
@@ -64,7 +67,7 @@ void main() {
     expect(c.shouldUseGpuSurface, isTrue);
   });
 
-  test('preferGpuSurface true still probes', () async {
+  test('preferGpuSurface true still probes and latches on false', () async {
     var probes = 0;
     final c = GpuSurfaceController(
       preferGpuSurface: true,

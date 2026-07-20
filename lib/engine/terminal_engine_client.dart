@@ -107,11 +107,8 @@ class TerminalEngineClient {
           : _binding.fullSnapshot();
       _grid.apply(update);
     }
-    try {
-      SchedulerBinding.instance.scheduleFrame();
-    } on Object {
-      // Headless tests without a scheduler binding.
-    }
+    // Why: MirrorGrid._notifyRepaint already schedules a frame — a second
+    // scheduleFrame here piles Frame Request Pending under scroll floods.
   }
 
   bool searchSet(
@@ -161,28 +158,33 @@ class TerminalEngineClient {
   Future<void> _drain() async {
     _drainScheduled = false;
     if (_disposed) return;
-    // Hold the advance guard across the WHOLE drain, including the scroll apply
+    // Hold the advance guard across the WHOLE drain, including scroll apply
     // below. Otherwise a feed() arriving during an awaited scroll/advance slips
     // past _scheduleDrain's (_drainScheduled || _advancing) gate and starts a
     // second overlapping advanceAndTakeDamage on the same engine.
+    //
+    // Loop while bytes keep arriving during awaits so interactive TUI echo
+    // collapses into fewer apply/notify cycles under one flight.
     _advancing = true;
     try {
-      if (_pendingColumns != null || _pendingRows != null) {
-        _flushPendingResize();
-      }
-      if (_disposed || _buf.isEmpty) return;
-      final batch = _buf.takeBytes();
-      if (_rasterHotPath) {
-        final frame = await _raster!.advanceAndTakeRasterPresent(batch);
+      while (!_disposed) {
+        if (_pendingColumns != null || _pendingRows != null) {
+          _flushPendingResize();
+        }
+        if (_disposed || _buf.isEmpty) break;
+        final batch = _buf.takeBytes();
+        if (_rasterHotPath) {
+          final frame = await _raster!.advanceAndTakeRasterPresent(batch);
+          if (_disposed) return;
+          _applyRasterFrame(frame);
+        } else {
+          final update = await _binding.advanceAndTakeDamage(batch);
+          if (_disposed) return;
+          _applyUpdate(update);
+        }
         if (_disposed) return;
-        _applyRasterFrame(frame);
-      } else {
-        final update = await _binding.advanceAndTakeDamage(batch);
-        if (_disposed) return;
-        _applyUpdate(update);
+        _binding.pumpEvents(); // route PtyWrite/Title/Bell/Clipboard for this batch
       }
-      if (_disposed) return;
-      _binding.pumpEvents(); // route PtyWrite/Title/Bell/Clipboard for this batch
     } finally {
       _advancing = false;
       if (!_disposed) _flushPendingResize();
@@ -230,11 +232,7 @@ class TerminalEngineClient {
     }
     _applyRasterChrome(frame);
     onRasterPresent?.call(frame);
-    try {
-      SchedulerBinding.instance.scheduleFrame();
-    } on Object {
-      // Headless tests without a scheduler binding.
-    }
+    // RasterPresentSurface + MirrorGrid chrome apply schedule their own frames.
   }
 
   void _applyRasterChrome(RasterPresentFrame frame) {
@@ -381,7 +379,7 @@ class TerminalEngineClient {
   void _applyScrollUpdate(GridUpdate update) {
     if (_disposed) return;
     _applyUpdate(update);
-    SchedulerBinding.instance.scheduleFrame();
+    // MirrorGrid notify schedules the frame.
   }
 
   void clearHistory() {

@@ -177,11 +177,34 @@ class CursorConfig {
 }
 
 class ScrollConfig {
-  const ScrollConfig({required this.history, required this.multiplier});
+  const ScrollConfig({
+    required this.history,
+    required this.multiplier,
+    this.sensitivity = 1.15,
+    this.fastSensitivity = 5.0,
+  });
   final int history;
   final int multiplier;
-  ScrollConfig copyWith({int? history, int? multiplier}) =>
-      ScrollConfig(history: history ?? this.history, multiplier: multiplier ?? this.multiplier);
+
+  /// Orca/xterm `scrollSensitivity` — scales history wheel/pan pixels.
+  /// Default 1.15 matches Orca's taller-cell compensation.
+  final double sensitivity;
+
+  /// Orca/xterm `fastScrollSensitivity` — used when Alt is held (history).
+  final double fastSensitivity;
+
+  ScrollConfig copyWith({
+    int? history,
+    int? multiplier,
+    double? sensitivity,
+    double? fastSensitivity,
+  }) =>
+      ScrollConfig(
+        history: history ?? this.history,
+        multiplier: multiplier ?? this.multiplier,
+        sensitivity: sensitivity ?? this.sensitivity,
+        fastSensitivity: fastSensitivity ?? this.fastSensitivity,
+      );
 }
 
 class MouseConfig {
@@ -693,6 +716,9 @@ class TerminalConfig {
       scrolling: ScrollConfig(
         history: integer(scrollM, 'history', d.scrolling.history),
         multiplier: integer(scrollM, 'multiplier', d.scrolling.multiplier),
+        sensitivity: dbl(scrollM, 'sensitivity', d.scrolling.sensitivity),
+        fastSensitivity:
+            dbl(scrollM, 'fast_sensitivity', d.scrolling.fastSensitivity),
       ),
       mouse: MouseConfig(
         doubleClickThreshold:

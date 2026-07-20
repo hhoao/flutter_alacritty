@@ -119,54 +119,123 @@ bool _pushScrollShift(
   return true;
 }
 
-/// Owns the retained grid [ui.Image] so partial dirty paints can composite over
-/// the previous frame without blanking clean rows. Held by [TerminalViewState]
-/// because [CustomPainter] has no dispose hook. Rasterized (not a nested
-/// [Picture]) so each replace flattens and does not grow a picture chain.
+/// Owns the retained grid frame so partial dirty paints can composite over the
+/// previous paint without blanking clean rows. Held by [TerminalViewState]
+/// because [CustomPainter] has no dispose hook.
+///
+/// Full paints and line-scroll blits store a [ui.Picture] (no `toImageSync`).
+/// Sparse typing partials may nest `drawPicture`; after [maxNestDepth] the
+/// painter re-roots with a full paint instead of flattening to an [ui.Image]
+/// (Image present looked dimmer than Picture and caused click/type flashes).
 class GridPaintRetain {
+  ui.Picture? _picture;
   ui.Image? _image;
   Size? _size;
   double _scrollFraction = 0;
   int _atlasGeneration = 0;
   int _styleKey = 0;
+  int _nestDepth = 0;
+
+  /// Flatten nested pictures after this many partial composites.
+  static const maxNestDepth = 8;
 
   ui.Image? get image => _image;
+  ui.Picture? get picture => _picture;
   Size? get size => _size;
+  int get nestDepth => _nestDepth;
 
-  /// Whether a partial dirty paint can reuse [_image] (same size / scroll /
-  /// atlas / style). Callers must full-repaint when this is false.
+  bool get hasContent => _picture != null || _image != null;
+
+  bool get needsFlatten =>
+      _image != null || _nestDepth >= maxNestDepth;
+
+  /// Blit retained content shifted by [deltaLines] cells (positive = down).
+  void blitScrolled(Canvas canvas, int deltaLines, double cellHeight, Size size) {
+    if (!hasContent || deltaLines == 0) return;
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.translate(0, deltaLines * cellHeight);
+    blitTo(canvas);
+    canvas.restore();
+  }
+
+  /// Whether a partial dirty paint can reuse the retained frame.
   bool canPartial({
     required Size size,
     required double scrollFraction,
     required int atlasGeneration,
     required int styleKey,
   }) =>
-      _image != null &&
+      hasContent &&
       _size == size &&
       _scrollFraction == scrollFraction &&
       _atlasGeneration == atlasGeneration &&
       _styleKey == styleKey;
 
-  void replace(
-    ui.Image image, {
+  /// Blit the retained frame at integer pixel origin (1:1, no rescale).
+  void blitTo(Canvas canvas) {
+    final img = _image;
+    if (img != null) {
+      canvas.drawImage(
+        img,
+        Offset.zero,
+        Paint()..filterQuality = FilterQuality.none,
+      );
+      return;
+    }
+    final pic = _picture;
+    if (pic != null) canvas.drawPicture(pic);
+  }
+
+  void replacePicture(
+    ui.Picture picture, {
     required Size size,
     required double scrollFraction,
     required int atlasGeneration,
     required int styleKey,
+    required int nestDepth,
   }) {
+    _picture?.dispose();
     _image?.dispose();
-    _image = image;
+    _image = null;
+    _picture = picture;
+    _nestDepth = nestDepth;
     _size = size;
     _scrollFraction = scrollFraction;
     _atlasGeneration = atlasGeneration;
     _styleKey = styleKey;
   }
 
-  void dispose() {
+  void replaceImage(
+    ui.Image image, {
+    required Size size,
+    required double scrollFraction,
+    required int atlasGeneration,
+    required int styleKey,
+  }) {
+    _picture?.dispose();
+    _picture = null;
     _image?.dispose();
+    _image = image;
+    _nestDepth = 0;
+    _size = size;
+    _scrollFraction = scrollFraction;
+    _atlasGeneration = atlasGeneration;
+    _styleKey = styleKey;
+  }
+
+  /// Drops retained content so the next paint must go full (e.g. after a
+  /// mid-cell scroll where shift is baked into pixels).
+  void invalidate() {
+    _picture?.dispose();
+    _image?.dispose();
+    _picture = null;
     _image = null;
     _size = null;
+    _nestDepth = 0;
   }
+
+  void dispose() => invalidate();
 }
 
 /// Paints the terminal grid (backgrounds + glyphs + decorations) — everything
@@ -194,8 +263,8 @@ class TerminalPainter extends CustomPainter {
 
   /// When non-null, glyphs are batched through this atlas with a single
   /// `drawRawAtlas` per frame instead of one `drawParagraph` per cell. Glyphs
-  /// not yet in the atlas fall back to [glyphs]/`drawParagraph` for one frame
-  /// while the atlas grows.
+  /// not yet in the atlas stay blank for one frame while the atlas grows
+  /// (no paragraph fallback — avoids LCD vs mask brightness flash).
   final GlyphAtlas? atlas;
   final double cellWidth;
   final double cellHeight;
@@ -247,9 +316,26 @@ class TerminalPainter extends CustomPainter {
     _lastPaintedGeneration = grid.generation;
     // Empty (already consumed) or full coverage → full paint fallback.
     if (dirty.isEmpty || dirty.length >= rows) return null;
-    if (!shifted) return dirty;
+    // Expand ±1 so glyph AA overhang into neighboring rows is cleared and
+    // redrawn — otherwise multi-scroll leaves "white dots" on clean bands.
+    final expanded = _expandDirtyRows(dirty, rows);
+    if (expanded.length >= rows) return null;
+    if (!shifted) return expanded;
     // Mid-cell scroll: always refresh the overscan sliver with dirty bands.
-    return <int>[-1, ...dirty];
+    return <int>[-1, ...expanded];
+  }
+
+  /// Neighbor rows for AA / glyph overhang around each damaged band.
+  static List<int> _expandDirtyRows(List<int> dirty, int rows) {
+    final set = <int>{};
+    for (final r in dirty) {
+      if (r < 0 || r >= rows) continue;
+      set.add(r);
+      if (r > 0) set.add(r - 1);
+      if (r + 1 < rows) set.add(r + 1);
+    }
+    final out = set.toList()..sort();
+    return out;
   }
 
   @override
@@ -257,54 +343,113 @@ class TerminalPainter extends CustomPainter {
     final rows = grid.rows, cols = grid.columns;
     if (rows == 0 || cols == 0) return;
     glyphs.beginFrame();
-    // Build any glyphs requested last frame, then start a fresh batch. The
-    // rebuild only does work when the glyph set grew, so steady state is free.
     final atlas = this.atlas;
-    atlas?.rebuildIfNeeded();
-    atlas?.beginBatch((rows + 1) * cols);
+    // Why: `toImageSync` inside paint stalls the frame; grow the atlas after
+    // present and request one follow-up frame if new glyphs appeared.
+    final pendingAtlas = atlas?.hasPending ?? false;
+    if (!pendingAtlas) {
+      atlas?.rebuildIfNeeded();
+    }
 
     final willShift = grid.scrollFraction > 0;
-    final dirtyRows = _rowsToPaint(rows, willShift);
+    final scrollDelta = grid.takeScrollLineDelta();
     final atlasGen = atlas?.generation ?? 0;
     final styleKey = _styleKey;
     final retain = this.retain;
-    // Without a reusable retained frame, skipping clean rows would blank them
-    // (CustomPainter replaces the whole picture each paint).
-    var paintAll = dirtyRows == null ||
-        retain == null ||
-        !retain.canPartial(
+
+    // Why: retain records into ceil(size) then scales on present, while
+    // CursorPainter shifts in layout space. During scrollFraction that mismatch
+    // jitters text (tag v2.3.2 painted layout-directly and did not). Mid-cell:
+    // paint like the no-retain path and drop any shifted retain buffer.
+    if (willShift) {
+      if (_lastPaintedGeneration != grid.generation) {
+        grid.takeDirtyRows();
+        _lastPaintedGeneration = grid.generation;
+      }
+      retain?.invalidate();
+      atlas?.beginBatch((rows + 1) * cols);
+      _paintGrid(canvas, size, rows, cols, paintAll: true, dirtyRows: null);
+      TerminalScrollLatency.markPaintOrPresentComplete(grid.generation);
+      _scheduleAtlasWarmupIfNeeded(atlas, pendingAtlas);
+      return;
+    }
+
+    final canRetain = retain != null &&
+        retain.canPartial(
           size: size,
           scrollFraction: grid.scrollFraction,
           atlasGeneration: atlasGen,
           styleKey: styleKey,
         );
 
-    // Benchmarks / one-shot renders: paint straight to the output canvas.
+    // Line-scroll: blit retained pixels and only repaint dirty/revealed rows.
+    var scrollBlit =
+        scrollDelta != 0 && scrollDelta.abs() < rows && canRetain;
+    List<int>? dirtyRows;
+    if (scrollBlit) {
+      final taken = grid.takeDirtyRows();
+      _lastPaintedGeneration = grid.generation;
+      final d = scrollDelta.abs();
+      final exposed = <int>{
+        if (scrollDelta > 0)
+          for (var i = 0; i < d; i++) i
+        else
+          for (var i = rows - d; i < rows; i++) i,
+        ...taken.where((r) => r >= 0 && r < rows),
+      };
+      dirtyRows = _expandDirtyRows(exposed.toList()..sort(), rows);
+      if (dirtyRows.length >= rows) {
+        scrollBlit = false;
+        dirtyRows = null;
+      }
+    }
+    if (!scrollBlit) {
+      dirtyRows ??= _rowsToPaint(rows, false);
+    }
+
+    var paintAll = dirtyRows == null || retain == null || !canRetain;
+
+    // Force full paint when we had a scroll delta but could not blit.
+    if (scrollDelta != 0 && !scrollBlit) {
+      paintAll = true;
+      dirtyRows = null;
+    }
+
+    // Why: deep Picture nests used to toImageSync-flatten (dimmer present than
+    // a root Picture). Re-root with paintAll instead so click/type stay on one
+    // Picture quality path. Same when retain is still an Image from older builds.
+    if (!paintAll &&
+        retain != null &&
+        (retain.image != null ||
+            retain.nestDepth >= GridPaintRetain.maxNestDepth)) {
+      paintAll = true;
+      dirtyRows = null;
+      scrollBlit = false;
+    }
+
+    final rowBudget = paintAll
+        ? (rows + 1) * cols
+        : ((dirtyRows?.length ?? rows) + 1) * cols;
+    atlas?.beginBatch(rowBudget);
+
     if (retain == null) {
       _paintGrid(canvas, size, rows, cols, paintAll: true, dirtyRows: null);
-      // Why: latency stop = first paint after scroll-echo MirrorGrid update.
       TerminalScrollLatency.markPaintOrPresentComplete(grid.generation);
+      _scheduleAtlasWarmupIfNeeded(atlas, pendingAtlas);
       return;
     }
 
-    // Record into a retained image so the next partial paint can blit clean
-    // rows from the previous frame, then patch only dirty bands. Rasterizing
-    // flattens each frame (avoids a growing nested-Picture chain).
-    //
-    // Why pixelSize (ceil): LayoutBuilder sizes are often fractional. Blitting
-    // ceil(image) → fractional Size every partial frame compounds a sub-pixel
-    // vertical scale, crushing clean rows upward while dirty rows repaint in
-    // place (typing looks like the prompt "rises" into scrollback). Keep the
-    // retain buffer 1:1 in integer pixels; scale once when presenting.
     final w = size.width.ceil();
     final h = size.height.ceil();
     final pixelSize = Size(w.toDouble(), h.toDouble());
     final recorder = ui.PictureRecorder();
     final layer = Canvas(recorder);
     if (!paintAll) {
-      final prev = retain.image!;
-      // 1:1 pixel blit — never rescale inside the retain loop.
-      layer.drawImage(prev, Offset.zero, Paint()..filterQuality = FilterQuality.none);
+      if (scrollBlit) {
+        retain.blitScrolled(layer, scrollDelta, cellHeight, pixelSize);
+      } else {
+        retain.blitTo(layer);
+      }
     }
     _paintGrid(
       layer,
@@ -315,22 +460,63 @@ class TerminalPainter extends CustomPainter {
       dirtyRows: dirtyRows,
     );
     final picture = recorder.endRecording();
-    final image = picture.toImageSync(w, h);
-    picture.dispose();
-    retain.replace(
-      image,
+
+    // Picture-only retain: full paints reset nest; partials increment until
+    // the paintAll re-root above fires (never toImageSync on this path).
+    retain.replacePicture(
+      picture,
       size: size,
       scrollFraction: grid.scrollFraction,
       atlasGeneration: atlasGen,
       styleKey: styleKey,
+      nestDepth: paintAll ? 0 : retain.nestDepth + 1,
     );
-    canvas.drawImageRect(
-      retain.image!,
-      Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
-      Offset.zero & size,
-      Paint()..filterQuality = FilterQuality.none,
-    );
+    _presentRetainPixels(canvas, size, w, h, retain);
     TerminalScrollLatency.markPaintOrPresentComplete(grid.generation);
+    _scheduleAtlasWarmupIfNeeded(atlas, pendingAtlas);
+  }
+
+  void _scheduleAtlasWarmupIfNeeded(GlyphAtlas? atlas, bool pending) {
+    if (!pending && !(atlas?.hasPending ?? false)) return;
+    try {
+      final binding = SchedulerBinding.instance;
+      binding.addPostFrameCallback((_) {
+        atlas?.rebuildIfNeeded();
+        binding.scheduleFrame();
+      });
+    } on Object {
+      // Headless tests.
+    }
+  }
+
+  /// Draw retained pixel/picture space (ceil size) into the possibly fractional
+  /// layout [size] with a single scale — never compound inside the retain loop.
+  void _presentRetainPixels(
+    Canvas canvas,
+    Size size,
+    int w,
+    int h,
+    GridPaintRetain retain,
+  ) {
+    final sx = size.width / w;
+    final sy = size.height / h;
+    final identity = (sx - 1.0).abs() < 1e-9 && (sy - 1.0).abs() < 1e-9;
+    if (!identity) {
+      canvas.save();
+      canvas.scale(sx, sy);
+    }
+    final img = retain.image;
+    if (img != null) {
+      canvas.drawImage(
+        img,
+        Offset.zero,
+        Paint()..filterQuality = FilterQuality.none,
+      );
+    } else {
+      final pic = retain.picture;
+      if (pic != null) canvas.drawPicture(pic);
+    }
+    if (!identity) canvas.restore();
   }
 
   void _paintGrid(
@@ -360,6 +546,10 @@ class TerminalPainter extends CustomPainter {
     final firstRow = shifted ? -1 : 0;
 
     if (!paintAll && clearPaint != null) {
+      // Clear only dirty row bands. Do not pad ±1px into neighboring rows:
+      // selection/overlays on those rows would be wiped without redraw, leaving
+      // 1px dark seams between selected lines (TUI selection grow is partial).
+      // Glyph AA overhang is covered by [_expandDirtyRows] instead.
       for (final row in dirtyRows!) {
         canvas.drawRect(
           Rect.fromLTWH(0, row * cellHeight, size.width, cellHeight),
@@ -402,6 +592,19 @@ class TerminalPainter extends CustomPainter {
         runColor = -1;
       }
 
+      // Selection is translucent: merge horizontal spans and draw after opaque
+      // bg so the overlay is not covered by a late bg flush.
+      var selRunStart = -1;
+      void flushSel(int endCol) {
+        if (selRunStart < 0) return;
+        canvas.drawRect(
+          Rect.fromLTWH(selRunStart * cellWidth, y,
+              (endCol - selRunStart) * cellWidth, cellHeight),
+          selPaint,
+        );
+        selRunStart = -1;
+      }
+
       for (var col = 0; col < cols; col++) {
         final flags = grid.flagsAt(row, col);
         final bool overlayLink = linkOverlay.isLinkCell(row, col);
@@ -420,14 +623,14 @@ class TerminalPainter extends CustomPainter {
           runStart = col;
           runColor = ec.bg;
         }
-        // Selection overlay is per-cell (translucent), so it can't be merged
-        // into the opaque bg runs; draw it on top of the background.
         if (isSelected(flags)) {
-          canvas.drawRect(
-              Rect.fromLTWH(col * cellWidth, y, cellWidth, cellHeight), selPaint);
+          if (selRunStart < 0) selRunStart = col;
+        } else {
+          flushSel(col);
         }
       }
       flushRun(cols);
+      flushSel(cols);
     }
 
     if (paintAll) {
@@ -474,39 +677,12 @@ class TerminalPainter extends CustomPainter {
           // for underline/strikeout decorations.
         } else if (atlas != null) {
           // Atlas path: tint a white coverage mask via drawRawAtlas (one call
-          // for the whole frame, emitted after the loop). A glyph not yet in the
-          // atlas is requested (built next frame) and drawn via the paragraph
-          // fallback this frame so nothing is ever missing.
+          // for the whole frame, emitted after the loop). Misses only queue a
+          // rebuild — no colored drawParagraph fallback (LCD vs mask modulate
+          // brightness flash). Cell stays bg until the post-frame atlas frame.
           final key = GlyphAtlas.keyFor(cp, bold: bold, italic: italic, wide: wide);
           if (atlas.request(key)) {
             atlas.addSprite(key, col * cellWidth, y, 0xFF000000 | ec.fg);
-          } else {
-            // Not yet atlased: queued for next frame (may trigger LRU eviction
-            // under capacity pressure, then re-rasterize). Draw via paragraph
-            // this frame. `atlas.hasPending` (checked after the loop) schedules
-            // the rebuild; GlyphCache miss alone sets needsWarmupFrame.
-            final paragraph =
-                glyphs.tryGet(cp, ec.fg, bold: bold, italic: italic, wide: wide);
-            if (paragraph != null) {
-              // Horizontal: up to 2 cells (Alacritty natural-width overflow for
-              // nerd icons / italics). Vertical: one cell (#5 row spill).
-              final clipW = cellWidth * 2;
-              canvas.save();
-              canvas.clipRect(
-                Rect.fromLTWH(col * cellWidth, y, clipW, cellHeight),
-                doAntiAlias: false,
-              );
-              canvas.drawParagraph(
-                paragraph,
-                Offset(
-                  col * cellWidth + glyphs.glyphOffsetX,
-                  y + glyphs.glyphOffsetY,
-                ),
-              );
-              canvas.restore();
-            } else {
-              needsWarmupFrame = true;
-            }
           }
         } else {
           final paragraph =
@@ -563,7 +739,15 @@ class TerminalPainter extends CustomPainter {
       canvas.drawLine(a, b, decoPaint);
     }
     if (needsWarmupFrame || (atlas?.hasPending ?? false)) {
-      SchedulerBinding.instance.scheduleFrame();
+      try {
+        final binding = SchedulerBinding.instance;
+        binding.addPostFrameCallback((_) {
+          atlas?.rebuildIfNeeded();
+          binding.scheduleFrame();
+        });
+      } on Object {
+        // Headless tests.
+      }
     }
 
     if (shifted) canvas.restore();

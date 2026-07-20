@@ -259,6 +259,7 @@ extension _TerminalViewPointer on TerminalViewState {
     _scrollController.onWheelSignal(
       dyPx: e.scrollDelta.dy,
       shiftHeld: hw.isShiftPressed,
+      altHeld: hw.isAltPressed,
     );
   }
 

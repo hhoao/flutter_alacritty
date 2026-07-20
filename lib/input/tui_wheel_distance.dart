@@ -172,12 +172,17 @@ int? _resolveTrackpadPixelWheelReportCount(
 /// Resolve how many TUI mouse-wheel reports to emit for [event].
 ///
 /// Port of Orca `resolveTerminalTuiMouseWheelReportCount`.
+///
+/// [forceTrackpad]: treat [event] as a pixel trackpad stream even when
+/// `|deltaY|` exceeds the discrete notch threshold (used when coalescing many
+/// small trackpad ticks into one ingest).
 int resolveTuiWheelReportCount(
   TuiWheelEvent event, {
   required num multiplier,
   required TuiWheelDistanceState state,
   double? cellHeight,
   int? rows,
+  bool forceTrackpad = false,
 }) {
   final direction = _resolveWheelDirection(event);
   if (state.pendingDirection != 0 && state.pendingDirection != direction) {
@@ -188,15 +193,18 @@ int resolveTuiWheelReportCount(
   }
   state.pendingDirection = direction;
 
-  final distanceRows = _resolveWheelDistanceRows(
-    event,
-    cellHeight: cellHeight,
-    rows: rows,
-  );
-  final trackpadReportCount =
-      _resolveTrackpadPixelWheelReportCount(event, state, distanceRows);
-  if (trackpadReportCount != null) {
-    return trackpadReportCount;
+  final distanceRows = forceTrackpad
+      ? event.deltaY.abs() / _normalizeCellHeight(cellHeight)
+      : _resolveWheelDistanceRows(
+          event,
+          cellHeight: cellHeight,
+          rows: rows,
+        );
+  if (forceTrackpad || _isTrackpadLikePixelWheelEvent(event)) {
+    final totalRows = state.pendingRows + distanceRows;
+    final reports = totalRows.truncate();
+    state.pendingRows = totalRows - reports;
+    return reports;
   }
 
   final scaledRows = math.min(

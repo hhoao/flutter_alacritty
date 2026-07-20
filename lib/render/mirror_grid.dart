@@ -178,6 +178,9 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
   // Row indices dirtied by the last apply / initializeEmpty; drained by
   // [takeDirtyRows] so painters can clip to dirty bands.
   final Set<int> _dirtyRows = <int>{};
+  /// Net viewport line scroll from the last [apply], consumed by the painter
+  /// for retain blit (exposed-edge paint instead of full-grid).
+  int _scrollLineDeltaForPaint = 0;
 
   @override
   void dispose() {
@@ -185,29 +188,43 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     super.dispose();
   }
 
-  /// Notifies repaint listeners. Deferred to post-frame when called from layout
-  /// (e.g. synchronous viewport apply inside [LayoutBuilder]) so dependents
-  /// like [TerminalHistoryScrollbar] do not setState during build.
+  /// Notifies repaint listeners at most once per vsync.
+  ///
+  /// Why: interactive TUI drains can apply many MirrorGrid updates per frame;
+  /// notifying on each apply schedules redundant CustomPaint work and floods
+  /// Frame Request Pending. Dirty rows accumulate until the coalesced paint.
+  /// Deferred to post-frame when called from layout so dependents do not
+  /// setState during build.
   void _notifyRepaint() {
     if (_repaintDisposed) return;
     try {
-      final phase = SchedulerBinding.instance.schedulerPhase;
+      final binding = SchedulerBinding.instance;
+      final phase = binding.schedulerPhase;
       if (phase == SchedulerPhase.persistentCallbacks ||
           phase == SchedulerPhase.midFrameMicrotasks) {
         if (_repaintNotifyScheduled) return;
         _repaintNotifyScheduled = true;
-        SchedulerBinding.instance.addPostFrameCallback((_) {
+        binding.addPostFrameCallback((_) {
           _repaintNotifyScheduled = false;
           if (_repaintDisposed) return;
           notifyListeners();
         });
         return;
       }
+      // Coalesce burst applies onto the next frame's transient callbacks.
+      if (_repaintNotifyScheduled) return;
+      _repaintNotifyScheduled = true;
+      binding.scheduleFrameCallback((_) {
+        _repaintNotifyScheduled = false;
+        if (_repaintDisposed) return;
+        notifyListeners();
+      });
+      binding.scheduleFrame();
     } on Object {
       // No scheduler binding (headless unit tests) — notify synchronously.
+      if (_repaintDisposed) return;
+      notifyListeners();
     }
-    if (_repaintDisposed) return;
-    notifyListeners();
   }
 
   /// Bumps on every [apply] / [initializeEmpty]; used by [TerminalPainter.shouldRepaint].
@@ -294,6 +311,14 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     return out;
   }
 
+  /// Net line scroll from the last [apply] (0 if none). Cleared on take so a
+  /// same-generation re-paint does not blit twice.
+  int takeScrollLineDelta() {
+    final d = _scrollLineDeltaForPaint;
+    _scrollLineDeltaForPaint = 0;
+    return d;
+  }
+
   void _markAllRowsDirty() {
     _dirtyRows.clear();
     for (var i = 0; i < _rows; i++) {
@@ -329,8 +354,20 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
     final delta = u.scrollLineDelta;
     if (delta != 0 && _rows > 0) {
       _rotateRows(delta);
-      // Rotation reshuffles the whole viewport; mark all rows dirty.
-      _markAllRowsDirty();
+      _scrollLineDeltaForPaint = delta;
+      // Only the rows revealed by the scroll need a fresh paint when the
+      // painter can blit the retained frame; if retain is unavailable the
+      // painter falls back to paintAll.
+      final d = delta.abs() > _rows ? _rows : delta.abs();
+      if (delta > 0) {
+        for (var i = 0; i < d; i++) {
+          _dirtyRows.add(i);
+        }
+      } else {
+        for (var i = _rows - d; i < _rows; i++) {
+          _dirtyRows.add(i);
+        }
+      }
     }
     for (final l in u.lines) {
       if (l.line < 0) continue;

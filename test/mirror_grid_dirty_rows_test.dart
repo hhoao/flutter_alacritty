@@ -86,8 +86,11 @@ void main() {
       cursorCol: 0,
       cursorVisible: true,
     ));
-    expect(g.takeDirtyRows(), [0, 1, 2]);
+    // Rotation only dirties the revealed edge; retain blit covers the rest.
+    expect(g.takeDirtyRows(), [0]);
     expect(g.takeDirtyRows(), isEmpty);
+    expect(g.takeScrollLineDelta(), 1);
+    expect(g.takeScrollLineDelta(), 0);
   });
 
   test('cursor move dirties old and new cursor rows', () {

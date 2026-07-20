@@ -75,7 +75,9 @@ class GpuSurfaceController {
 
   /// Attempts attach via [probe]. Returns whether GPU/raster path is ready.
   ///
-  /// Failures latch [usePainterFallback] (logged once) until [retry].
+  /// Thrown probe errors latch [usePainterFallback] until [retry]. A soft
+  /// `false` from the probe (env unset / not available) does **not** latch —
+  /// auto mode stays on the painter without a scary "attach failed" log.
   Future<bool> ensureAttached() async {
     if (preferGpuSurface == false) {
       return false;
@@ -91,11 +93,14 @@ class GpuSurfaceController {
     try {
       ok = await probe();
     } catch (e) {
-      _latchFallback();
+      _latchFallback('probe threw: $e');
       return false;
     }
     if (!ok) {
-      _latchFallback();
+      // Forced prefer must latch; auto soft-decline stays retryable.
+      if (preferGpuSurface == true) {
+        _latchFallback('forced probe returned false');
+      }
       return false;
     }
     gpuReady = true;
@@ -112,14 +117,15 @@ class GpuSurfaceController {
     _loggedLatch = false;
   }
 
-  void _latchFallback() {
+  void _latchFallback([String? reason]) {
     usePainterFallback = true;
     gpuReady = false;
     textureId = -1;
     if (!_loggedLatch) {
       _loggedLatch = true;
+      final detail = reason == null ? '' : ' ($reason)';
       debugPrint(
-        'flutter_alacritty: GPU surface attach failed; '
+        'flutter_alacritty: GPU surface unavailable$detail; '
         'latched CustomPainter fallback until retry()',
       );
     }
