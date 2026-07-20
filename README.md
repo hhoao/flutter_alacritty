@@ -39,7 +39,7 @@ dependencies:
   flutter_alacritty: ^2.2.1
 ```
 
-Requires [`rust_lib_flutter_alacritty`](https://pub.dev/packages/rust_lib_flutter_alacritty) **0.2.1** or newer (pulled in automatically).
+Requires [`rust_lib_flutter_alacritty`](https://pub.dev/packages/rust_lib_flutter_alacritty) **0.2.2** or newer (pulled in automatically).
 
 ## Use as a library
 

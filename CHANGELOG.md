@@ -1,4 +1,4 @@
-## Unreleased
+## 2.4.0
 
 ### TUI scroll performance
 
@@ -12,7 +12,8 @@
   glyphs; mid-cell `scroll_fraction` and selection/search visuals not on
   raster — data path via `refreshView`).
 - **Perf:** Dirty-row painter, glyph-atlas LRU, tighter `scroll_fraction`
-  damage (partial + overscan).
+  damage (partial + overscan); stabilize paint present and keep selection on
+  partial damage.
 - **Docs:** `docs/library-api.md` scroll/present sections; latency method in
   `docs/superpowers/specs/2026-07-16-tui-scroll-latency-method.md`.
 - **Bench:** Loosen `kScrollRefreshVsFullSnapshotMaxRatio` 0.65 → 1.0 — both
@@ -35,9 +36,8 @@
   (`SystemSound` when `onBell` is null; visual flash only if `bellDuration > 0`).
 - **Note:** `case_sensitive: false` is always case-insensitive (not Alacritty
   smart-case).
-- **Note:** `rust_lib` temporarily patches local `alacritty_terminal` for
-  `RegexSearch::with_case_insensitive` — replace with a published fork/`rev`
-  (or upstream merge) before pub.dev publish.
+- **Deps:** Requires [`rust_lib_flutter_alacritty`](https://pub.dev/packages/rust_lib_flutter_alacritty)
+  `^0.2.2` (fork-pinned `alacritty_terminal` with `with_case_insensitive`).
 
 ## 2.3.2
 
