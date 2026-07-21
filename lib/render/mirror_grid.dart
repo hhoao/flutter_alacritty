@@ -197,6 +197,9 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
   /// setState during build.
   void _notifyRepaint() {
     if (_repaintDisposed) return;
+    // Detached engines (PTY still feeding after TerminalView unmount) must not
+    // scheduleFrames — that starves Priority.idle mounts (e.g. landing compose).
+    if (!hasListeners) return;
     try {
       final binding = SchedulerBinding.instance;
       final phase = binding.schedulerPhase;
