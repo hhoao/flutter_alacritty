@@ -156,8 +156,8 @@ Future<ui.Image> _renderToImage(MirrorGrid grid, String outPath,
   );
   final size = ui.Size(cols * _cw, rows * _ch);
 
-  // The atlas path needs one warmup paint: frame 1 requests glyphs (drawn via
-  // fallback), frame 2 (after rebuildIfNeeded) draws them from the atlas.
+  // The atlas path needs one warmup paint: frame 1 requests glyphs (cells stay
+  // blank — no paragraph fallback), frame 2 draws them after rebuildIfNeeded.
   ui.Image render() {
     final rec = ui.PictureRecorder();
     final canvas = Canvas(rec);

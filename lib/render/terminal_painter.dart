@@ -264,7 +264,9 @@ class TerminalPainter extends CustomPainter {
   /// When non-null, glyphs are batched through this atlas with a single
   /// `drawRawAtlas` per frame instead of one `drawParagraph` per cell. Glyphs
   /// not yet in the atlas stay blank for one frame while the atlas grows
-  /// (no paragraph fallback — avoids LCD vs mask brightness flash).
+  /// (no paragraph fallback — avoids LCD vs mask brightness flash); the
+  /// post-frame rebuild then [MirrorGrid.requestRepaint]s so the follow-up
+  /// frame actually paints the new slots.
   final GlyphAtlas? atlas;
   final double cellWidth;
   final double cellHeight;
@@ -482,10 +484,13 @@ class TerminalPainter extends CustomPainter {
       final binding = SchedulerBinding.instance;
       binding.addPostFrameCallback((_) {
         atlas?.rebuildIfNeeded();
-        binding.scheduleFrame();
+        // scheduleFrame alone does not paint CustomPaint(repaint: grid);
+        // notify so the blank miss cells are redrawn with new atlas slots.
+        grid.requestRepaint();
       });
     } on Object {
-      // Headless tests.
+      // Headless tests — rebuild now; the next explicit paint picks it up.
+      atlas?.rebuildIfNeeded();
     }
   }
 
@@ -743,10 +748,11 @@ class TerminalPainter extends CustomPainter {
         final binding = SchedulerBinding.instance;
         binding.addPostFrameCallback((_) {
           atlas?.rebuildIfNeeded();
-          binding.scheduleFrame();
+          grid.requestRepaint();
         });
       } on Object {
-        // Headless tests.
+        // Headless tests — rebuild now; the next explicit paint picks it up.
+        atlas?.rebuildIfNeeded();
       }
     }
 

@@ -195,6 +195,12 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
   /// Frame Request Pending. Dirty rows accumulate until the coalesced paint.
   /// Deferred to post-frame when called from layout so dependents do not
   /// setState during build.
+  ///
+  /// Also used after a deferred glyph-atlas rebuild so `CustomPaint(repaint:
+  /// grid)` actually paints the newly atlased glyphs (`scheduleFrame` alone
+  /// does not mark the render object dirty).
+  void requestRepaint() => _notifyRepaint();
+
   void _notifyRepaint() {
     if (_repaintDisposed) return;
     // Detached engines (PTY still feeding after TerminalView unmount) must not

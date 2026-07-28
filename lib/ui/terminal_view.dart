@@ -589,6 +589,9 @@ class TerminalViewState extends State<TerminalView>
       devicePixelRatio: dpr,
     );
     _atlas!.prewarmAscii();
+    // Rasterize the prewarm queue before the first paint so common ASCII is not
+    // blank for a frame (misses stay bg until a post-frame rebuild).
+    _atlas!.rebuildIfNeeded();
   }
 
   void _disposeAtlas() {
