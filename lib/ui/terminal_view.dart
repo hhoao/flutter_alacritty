@@ -17,6 +17,8 @@ import '../engine/terminal_engine.dart';
 import '../input/ime_key_routing.dart';
 import '../input/ime_session.dart';
 import '../input/key_input.dart';
+import '../input/modifier_latch.dart';
+import '../input/terminal_key_injector.dart';
 import '../input/mouse_input.dart';
 import '../input/paste.dart';
 import '../input/term_mode.dart';
@@ -124,6 +126,7 @@ class TerminalView extends StatefulWidget {
     this.onBell,
     this.onPtyResize,
     this.preferGpuSurface,
+    this.modifierLatch,
     List<TerminalLinkProvider>? linkProviders,
   })  : linkProviders = linkProviders ?? _defaultLinkProviders,
         textStyle = textStyle ?? TerminalStyle.defaults();
@@ -142,6 +145,9 @@ class TerminalView extends StatefulWidget {
   /// Surface selection: `null` auto-probes, `true` forces a GPU attempt,
   /// `false` forces the [CustomPainter] path (never probes).
   final bool? preferGpuSurface;
+
+  /// Optional sticky virtual modifiers for touch accessory keys.
+  final ModifierLatch? modifierLatch;
 
   /// Cursor blink half-period.
   final Duration cursorBlinkInterval;
@@ -270,6 +276,7 @@ class TerminalViewState extends State<TerminalView>
     onPreeditChanged: _onPreeditChanged,
     onBackspace: _onImeBackspace,
   );
+  TerminalKeyInjector? _keyInjector;
   Rect? _lastReportedCaretRect;
 
   bool _lastFocused = false;
@@ -315,6 +322,9 @@ class TerminalViewState extends State<TerminalView>
 
   @visibleForTesting
   ImeSession get imeForTest => _ime;
+
+  @visibleForTesting
+  ModifierLatch? get modifierLatchForTest => widget.modifierLatch;
 
   @visibleForTesting
   String? get preeditForTest => _preedit;
@@ -398,6 +408,7 @@ class TerminalViewState extends State<TerminalView>
     _blinkTimer = Timer.periodic(widget.cursorBlinkInterval, (_) => _blinkTick());
     _focus.addListener(_reportFocus);
     _focus.addListener(_handleImeFocusChange);
+    _syncKeyInjector();
     _bellSub = _engine.bell.listen((_) => _flashBell());
     for (final p in widget.linkProviders) {
       p.addListener(_onProviderChanged);
@@ -479,6 +490,9 @@ class TerminalViewState extends State<TerminalView>
       _ownsFocus = widget.focusNode == null;
       _focus.addListener(_reportFocus);
       _focus.addListener(_handleImeFocusChange);
+    }
+    if (!identical(widget.modifierLatch, oldWidget.modifierLatch)) {
+      _syncKeyInjector();
     }
     if (oldWidget.bellDuration != widget.bellDuration) {
       _bellCtrl.duration = widget.bellDuration > Duration.zero
@@ -955,8 +969,22 @@ class TerminalViewState extends State<TerminalView>
       _ime.attach();
     } else {
       _ime.detach();
+      widget.modifierLatch?.clear();
       _lastReportedCaretRect = null;
     }
+  }
+
+  void _syncKeyInjector() {
+    final latch = widget.modifierLatch;
+    _keyInjector = latch == null
+        ? null
+        : TerminalKeyInjector(
+            latch: latch,
+            modeFlags: () => _grid.modeFlags,
+            write: _writeToEngine,
+            resetComposing: () => _ime.resetComposing(),
+            isComposing: () => _ime.isComposing,
+          );
   }
 
   void _onPreeditChanged(String? p) {
@@ -968,7 +996,12 @@ class TerminalViewState extends State<TerminalView>
   void _writeCommittedText(String t) {
     if (t.isEmpty) return;
     _onTerminalInputStart();
-    _writeToEngine(Uint8List.fromList(utf8.encode(t)));
+    final injector = _keyInjector;
+    if (injector != null) {
+      injector.injectText(t);
+    } else {
+      _writeToEngine(Uint8List.fromList(utf8.encode(t)));
+    }
   }
 
   void _onImeBackspace() {
@@ -1201,6 +1234,33 @@ class TerminalViewState extends State<TerminalView>
     if (!_focus.hasFocus) {
       _focus.requestFocus();
     }
+  }
+
+  void ensureKeyboardVisible() => _ime.ensureVisible();
+
+  void hideKeyboard() => _ime.hide();
+
+  void injectLogicalKey(LogicalKeyboardKey key) {
+    final injector = _keyInjector;
+    if (injector != null) {
+      _onTerminalInputStart();
+      injector.injectKey(key);
+      return;
+    }
+    if (_ime.isComposing) _ime.resetComposing();
+    final hw = HardwareKeyboard.instance;
+    final bytes = encodeKey(
+      key,
+      null,
+      shift: hw.isShiftPressed,
+      alt: hw.isAltPressed,
+      ctrl: hw.isControlPressed,
+      meta: hw.isMetaPressed,
+      modeFlags: _grid.modeFlags,
+    );
+    if (bytes == null) return;
+    _onTerminalInputStart();
+    _writeToEngine(bytes);
   }
 
   // Forwarders: extension methods in [terminal_view_pointer.dart] are not

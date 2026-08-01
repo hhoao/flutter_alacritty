@@ -10,6 +10,7 @@ import '../controller/terminal_controller.dart';
 import '../controller/terminal_search_options.dart';
 import '../engine/terminal_engine.dart';
 import '../input/key_bindings.dart';
+import '../input/modifier_latch.dart';
 import '../input/paste.dart';
 import '../pty/flutter_pty_backend.dart';
 import '../pty/pty_backend.dart';
@@ -73,6 +74,7 @@ class ExampleTerminalApp extends StatefulWidget {
     this.config,
     this.configUpdates,
     this.launchUrl,
+    this.modifierLatch,
     super.key,
   });
 
@@ -85,6 +87,7 @@ class ExampleTerminalApp extends StatefulWidget {
   final TerminalConfig? config;
   final Stream<TerminalConfig>? configUpdates;
   final UrlLauncher? launchUrl;
+  final ModifierLatch? modifierLatch;
 
   @override
   State<ExampleTerminalApp> createState() => _ExampleTerminalAppState();
@@ -465,6 +468,7 @@ class _ExampleTerminalAppState extends State<ExampleTerminalApp> {
                                   horizontal: _config.window.padding.x,
                                   vertical: _config.window.padding.y),
                               focusNode: _focus,
+                              modifierLatch: widget.modifierLatch,
                               autofocus: true,
                               cursorBlinkInterval: Duration(
                                   milliseconds:

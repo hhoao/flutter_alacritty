@@ -265,6 +265,7 @@ extension _TerminalViewPointer on TerminalViewState {
 
   void __pointerOnTouchTap() {
     _focus.requestFocus();
+    _ime.ensureVisible();
     if (_controller.selectionActive) {
       _controller.clearSelection();
       _refreshSelection();
