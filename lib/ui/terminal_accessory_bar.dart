@@ -78,6 +78,7 @@ class _TerminalAccessoryBarState extends State<TerminalAccessoryBar> {
   }
 
   void _toggleLatch(AccessoryLatchKey key) {
+    widget.onBeforeKey?.call();
     switch (key.kind) {
       case ModifierKind.ctrl:
         widget.latch.toggleCtrl();
