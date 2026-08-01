@@ -1,5 +1,6 @@
 import 'dart:ui' show PlatformDispatcher;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Sentinel editing state so macOS/Windows TextInput can signal Backspace via
@@ -63,6 +64,32 @@ class ImeSession implements TextInputClient {
     );
     _resetEditing(notify: false);
     _conn!.show();
+  }
+
+  /// Re-show the platform soft keyboard when already attached (e.g. tap after
+  /// hide without detach).
+  void ensureVisible() {
+    if (!isAttached) {
+      attach();
+      return;
+    }
+    _conn!.show();
+  }
+
+  /// Hide the soft keyboard without closing the TextInput session.
+  void hide() {
+    final conn = _conn;
+    if (conn == null) return;
+    if (conn is IDebugImeConnection) {
+      (conn as IDebugImeConnection).hide();
+    } else {
+      conn.hideImeKeyboard();
+    }
+  }
+
+  @visibleForTesting
+  void debugBindConnection(TextInputConnection conn) {
+    _conn = conn;
   }
 
   /// Close the session and clear any visible preedit. Safe to call when not
@@ -175,5 +202,17 @@ class ImeSession implements TextInputClient {
       onBackspace();
       _resetEditing(notify: false);
     }
+  }
+}
+
+/// Test seam for [ImeSession.hide] — [TextInputConnection] has no platform hide API.
+@visibleForTesting
+mixin IDebugImeConnection {
+  void hide();
+}
+
+extension on TextInputConnection {
+  void hideImeKeyboard() {
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   }
 }

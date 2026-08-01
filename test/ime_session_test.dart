@@ -1,6 +1,35 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_alacritty/input/ime_session.dart';
+
+class _FakeTextInputConnection with IDebugImeConnection implements TextInputConnection {
+  int showCount = 0;
+  int hideCount = 0;
+  int closeCount = 0;
+  bool _attached = true;
+
+  @override
+  bool get attached => _attached;
+
+  @override
+  void show() => showCount++;
+
+  @override
+  void hide() => hideCount++;
+
+  @override
+  void close() {
+    closeCount++;
+    _attached = false;
+  }
+
+  @override
+  void setEditingState(TextEditingValue value) {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
 
 void main() {
   void noopBackspace() {}
@@ -151,6 +180,46 @@ void main() {
     );
     expect(() => s.detach(), returnsNormally);
     expect(s.isAttached, isFalse);
+  });
+
+  group('ensureVisible', () {
+    test('calls show when already attached (can call show twice)', () {
+      final s = ImeSession(
+        onCommit: (_) {},
+        onPreeditChanged: (_) {},
+        onBackspace: noopBackspace,
+      );
+      final conn = _FakeTextInputConnection();
+      s.debugBindConnection(conn);
+
+      expect(s.isAttached, isTrue);
+
+      s.ensureVisible();
+      s.ensureVisible();
+
+      expect(conn.showCount, 2);
+      expect(s.isAttached, isTrue);
+    });
+  });
+
+  group('hide', () {
+    test('calls connection hide without detach (still isAttached)', () {
+      final s = ImeSession(
+        onCommit: (_) {},
+        onPreeditChanged: (_) {},
+        onBackspace: noopBackspace,
+      );
+      final conn = _FakeTextInputConnection();
+      s.debugBindConnection(conn);
+
+      expect(s.isAttached, isTrue);
+
+      s.hide();
+
+      expect(conn.hideCount, 1);
+      expect(conn.closeCount, 0);
+      expect(s.isAttached, isTrue);
+    });
   });
 
   group('resetComposing', () {
