@@ -13,6 +13,10 @@ void main() {
     expect(c.usePainterFallback, isFalse);
   });
 
+  test('envGpuEnabled is sync and false without FLUTTER_ALACRITTY_GPU', () {
+    expect(GpuSurfaceController.envGpuEnabled(), isFalse);
+  });
+
   test('preferGpuSurface false never probes', () async {
     var probes = 0;
     final c = GpuSurfaceController(

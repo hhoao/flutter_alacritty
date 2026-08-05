@@ -50,10 +50,9 @@ class GpuSurfaceController {
 
   bool _loggedLatch = false;
 
-  /// Probe: `FLUTTER_ALACRITTY_GPU=1`, or desktop VM (non-web) when the host
-  /// forced [preferGpuSurface] — see [TerminalView] custom probe. Default auto
-  /// without the env var stays false so widget tests keep the painter.
-  static Future<bool> defaultProbe() async {
+  /// Sync env check for auto mode — avoids `await` mis-attributing later sync
+  /// work (layout / IME) to [ensureAttached] wall-clock.
+  static bool envGpuEnabled() {
     if (kIsWeb) return false;
     try {
       return Platform.environment['FLUTTER_ALACRITTY_GPU'] == '1';
@@ -61,6 +60,10 @@ class GpuSurfaceController {
       return false;
     }
   }
+
+  /// Probe: `FLUTTER_ALACRITTY_GPU=1`. Default auto without the env var stays
+  /// false so widget tests keep the painter.
+  static Future<bool> defaultProbe() async => envGpuEnabled();
 
   /// Whether the view should prefer the GPU/raster path (not cell painter).
   ///

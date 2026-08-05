@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert' show utf8;
-import 'dart:typed_data';
-
+import 'dart:developer' as developer;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
@@ -26,11 +26,6 @@ import '../links/link_overlay.dart';
 import '../links/terminal_link_provider.dart';
 import '../render/cell_flags.dart';
 import '../render/cell_metrics.dart';
-import 'terminal_bell.dart';
-import 'terminal_viewport.dart';
-import 'terminal_viewport_controller.dart';
-import 'terminal_scroll_controller.dart';
-import 'viewport_geometry.dart';
 import '../render/glyph_atlas.dart';
 import '../render/glyph_cache.dart';
 import '../render/gpu_surface.dart';
@@ -39,7 +34,12 @@ import '../render/raster_present_surface.dart';
 import '../render/terminal_painter.dart';
 import '../theme/terminal_theme.dart';
 import 'preedit_overlay.dart';
+import 'terminal_bell.dart';
+import 'terminal_scroll_controller.dart';
 import 'terminal_shortcuts.dart';
+import 'terminal_viewport.dart';
+import 'terminal_viewport_controller.dart';
+import 'viewport_geometry.dart';
 
 part 'terminal_view_pointer.dart';
 
@@ -379,6 +379,7 @@ class TerminalViewState extends State<TerminalView>
   @override
   void initState() {
     super.initState();
+    developer.Timeline.startSync('TerminalView.initState');
     _viewportController = TerminalViewportController(
       engine: widget.engine,
       onPtyResize: widget.onPtyResize,
@@ -398,7 +399,13 @@ class TerminalViewState extends State<TerminalView>
       preferGpuSurface: widget.preferGpuSurface,
       probe: _gpuProbe,
     );
-    unawaited(_attachGpuSurface());
+    // Skip GPU soft-decline without awaiting — an async probe false was
+    // wall-clock attributed to whatever blocked the isolate next (often IME).
+    if (widget.preferGpuSurface != false &&
+        (widget.preferGpuSurface == true ||
+            GpuSurfaceController.envGpuEnabled())) {
+      unawaited(_attachGpuSurface());
+    }
     _bellCtrl = AnimationController(
       vsync: this,
       duration: widget.bellDuration > Duration.zero
@@ -418,6 +425,7 @@ class TerminalViewState extends State<TerminalView>
       _lastScrollFraction = _grid.scrollFraction;
       _grid.addListener(_onGridLinkContextChanged);
     }
+    developer.Timeline.finishSync();
   }
 
   @override
@@ -551,7 +559,8 @@ class TerminalViewState extends State<TerminalView>
   /// Prefer GPU when forced, or when `FLUTTER_ALACRITTY_GPU=1` (default probe).
   Future<bool> _gpuProbe() async {
     if (widget.preferGpuSurface == true) return true;
-    return GpuSurfaceController.defaultProbe();
+    if (widget.preferGpuSurface == false) return false;
+    return GpuSurfaceController.envGpuEnabled();
   }
 
   /// Strut multiplier matching measured *content* height (primary-font
@@ -582,12 +591,16 @@ class TerminalViewState extends State<TerminalView>
       );
 
   /// Ensures [_atlas] exists and matches the current font metrics and [dpr].
-  /// Cheap no-op once built; recreated only when the cache was invalidated
-  /// (font zoom / style change null it) or the device pixel ratio changes.
+  ///
+  /// Queues ASCII glyphs and rasters them in small post-frame batches so
+  /// Frame 0 stays responsive (one frame may show empty cells) instead of one
+  /// synchronous `toImageSync` for the whole ASCII set.
   void _ensureAtlas(double dpr) {
     if (_atlas != null && _atlasDpr == dpr) return;
+    developer.Timeline.startSync('TerminalView.ensureAtlas');
     _atlas?.dispose();
     _atlasDpr = dpr;
+
     _atlas = GlyphAtlas(
       fontFamily: widget.textStyle.family,
       fontFamilyFallback: widget.textStyle.fallback,
@@ -603,9 +616,25 @@ class TerminalViewState extends State<TerminalView>
       devicePixelRatio: dpr,
     );
     _atlas!.prewarmAscii();
-    // Rasterize the prewarm queue before the first paint so common ASCII is not
-    // blank for a frame (misses stay bg until a post-frame rebuild).
-    _atlas!.rebuildIfNeeded();
+    developer.Timeline.finishSync();
+    _scheduleAtlasRaster();
+  }
+
+  void _scheduleAtlasRaster() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final atlas = _atlas;
+      if (atlas == null || !atlas.hasPending) return;
+      developer.Timeline.startSync('TerminalView.atlasRaster');
+      // Raster the prewarmed ASCII in one toImageSync after the first frame so
+      // Frame 0 stays responsive and the next frame is fully painted. Fonts are
+      // registered, so a single ASCII pass is fast — splitting into many small
+      // batches only adds per-toImageSync fixed overhead and a blank first
+      // frame.
+      atlas.rebuildIfNeeded();
+      developer.Timeline.finishSync();
+      if (mounted) setState(() {});
+    });
   }
 
   void _disposeAtlas() {
@@ -627,10 +656,11 @@ class TerminalViewState extends State<TerminalView>
       );
       // Seed the pixmap so the first frame is not blank.
       _engine.refreshView();
+      setState(() {});
     } else {
       _engine.setRasterPresent(enabled: false);
+      // Soft decline: painter path is already the default — skip setState.
     }
-    setState(() {});
   }
 
   /// Grid present widget. GPU/raster path draws the Rust RGBA pixmap; cursor
@@ -966,7 +996,15 @@ class TerminalViewState extends State<TerminalView>
     if (_focus.hasFocus) {
       // Route hardware keys through TextInput on macOS/Windows IME (xterm parity).
       _focus.consumeKeyboardToken();
-      _ime.attach();
+      // Defer off the first layout pass: autofocus notifies during Focus mount,
+      // and a sync TextInput.attach/show on Linux IM can stall the UI isolate
+      // for seconds (previously mis-logged as attachGpu wall-clock).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_focus.hasFocus || _ime.isAttached) return;
+        developer.Timeline.startSync('TerminalView.imeAttach');
+        _ime.attach();
+        developer.Timeline.finishSync();
+      });
     } else {
       _ime.detach();
       widget.modifierLatch?.clear();
@@ -1057,6 +1095,7 @@ class TerminalViewState extends State<TerminalView>
         final availH =
             (constraints.maxHeight - pad.vertical).clamp(0.0, double.infinity);
 
+        developer.Timeline.startSync('TerminalView.layoutBuilder');
         final query = ViewportQuery(
           available: Size(availW, availH),
           cell: _metrics,
@@ -1081,8 +1120,9 @@ class TerminalViewState extends State<TerminalView>
               : viewport.cellAreaHeight,
         );
         _ensureAtlas(MediaQuery.devicePixelRatioOf(context));
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _reportCaretRectToIme());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _reportCaretRectToIme();
+        });
         Widget tree = Listener(
             behavior: HitTestBehavior.translucent,
             onPointerDown: _onPointerDown,
@@ -1213,6 +1253,7 @@ class TerminalViewState extends State<TerminalView>
         // walks UP to the ancestor `Actions` widget) before falling through
         // to the encodeKey path. If we let the encodeKey run unconditionally,
         // chords like Ctrl+Shift+F would also produce the 0x06 control byte.
+        developer.Timeline.finishSync();
         return Shortcuts(
           shortcuts: widget.shortcuts ?? defaultTerminalShortcuts,
           child: Actions(
