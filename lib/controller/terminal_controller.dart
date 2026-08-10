@@ -68,6 +68,30 @@ class TerminalController extends ChangeNotifier {
 
   String? readSelectionText() => _engine?.selectionText();
 
+  /// Select the entire scrollback (history + visible viewport), then restore
+  /// the viewport to where it was.
+  ///
+  /// The anchor must land on buffer row 0 (reachable only from the live-bottom
+  /// viewport) and the focus on the last buffer row (reachable only from the
+  /// history top), so the viewport tours bottom → top → original position
+  /// before one [TerminalEngine.refreshView] paints the highlight. Without
+  /// that refresh the engine-side selection would never reach the mirror grid
+  /// (FLAG_SELECTED comes from snapshots only), making "Select All" appear to
+  /// do nothing.
+  Future<void> selectAll() async {
+    final engine = _engine;
+    if (engine == null) return;
+    final grid = engine.grid;
+    if (grid.rows <= 0 || grid.columns <= 0) return;
+    final position = grid.displayOffset + grid.scrollFraction;
+    await engine.scrollToBottom();
+    selectionStart(0, 0, false, 0);
+    await engine.scrollToTop();
+    selectionUpdate(grid.rows - 1, grid.columns - 1, false);
+    await engine.scrollToOffset(position);
+    engine.refreshView();
+  }
+
   /// Snapshot the current engine selection into [primary]. Notifies only on
   /// change so a redundant capture (e.g. tap after a tap) doesn't churn the
   /// listener chain.
