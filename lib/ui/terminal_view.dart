@@ -13,6 +13,7 @@ import 'package:flutter/services.dart'
         LogicalKeyboardKey;
 
 import '../controller/terminal_controller.dart';
+import '../debug/terminal_scroll_trace.dart';
 import '../engine/terminal_engine.dart';
 import '../input/ime_key_routing.dart';
 import '../input/ime_session.dart';
@@ -1145,6 +1146,12 @@ class TerminalViewState extends State<TerminalView>
             },
             onPointerPanZoomUpdate: (e) {
               _recordPanSample(e.timeStamp, e.localPanDelta.dy);
+              // Trackpad pan must report at the hovered cell — the TUI's
+              // hit-test dispatches the scroll event from that cell, and a
+              // stale default (1,1) lands outside scrollable regions (opencode
+              // would never scroll). Mirrors `__pointerOnSignal` for wheels.
+              final (r, c, _) = _cellAt(e.localPosition);
+              _scrollController.setWheelCell(col: c + 1, row: r + 1);
               _scrollController.onPanDelta(
                 dyPx: e.localPanDelta.dy,
                 shiftHeld: HardwareKeyboard.instance.isShiftPressed,
