@@ -216,6 +216,11 @@ class TerminalScrollController {
   }) {
     final modeFlags = engine.grid.modeFlags;
     final dest = scrollDestination(modeFlags: modeFlags, shiftHeld: shiftHeld);
+    TerminalScrollTrace.log(
+      'controller',
+      'ingest dy=$dyPx wheel=$wheelStyle shift=$shiftHeld '
+      'dest=$dest anyMouse=${anyMouse(modeFlags)} modeFlags=$modeFlags',
+    );
 
     // Scrollback: wheel uses discrete lines (Alacritty `scroll_terminal` parity);
     // touch pan / fling keep sub-cell `scroll_pixels` for smooth drag.
@@ -296,6 +301,11 @@ class TerminalScrollController {
         row: _wheelRow,
         modeFlags: modeFlags,
       );
+      TerminalScrollTrace.log(
+        'controller',
+        'tui mouse wheel n=$n up=$up col=$_wheelCol row=$_wheelRow '
+        'bytes=${bytes.length}',
+      );
       if (bytes.isNotEmpty) _scheduleProgramWrite(bytes);
       return;
     }
@@ -320,6 +330,11 @@ class TerminalScrollController {
             modeFlags: modeFlags,
           )
         : encodeAlternateScrollLines(lines: n, up: up);
+    TerminalScrollTrace.log(
+      'controller',
+      'tui wheel lines=$n up=$up anyMouse=${anyMouse(modeFlags)} '
+      'bytes=${bytes.length}',
+    );
     if (bytes.isNotEmpty) _scheduleProgramWrite(bytes);
   }
 
@@ -364,6 +379,10 @@ class TerminalScrollController {
   bool _programScheduled = false;
 
   void _scheduleProgramWrite(Uint8List bytes) {
+    TerminalScrollTrace.log(
+      'controller',
+      'scheduleProgramWrite ${bytes.length}B ${String.fromCharCodes(bytes.take(32)).replaceAll('\x1b', 'ESC')}',
+    );
     _pendingProgramBytes.add(bytes);
     if (_programScheduled) return;
     // Why: latency start = first enqueue of a program-scroll batch (locked method).

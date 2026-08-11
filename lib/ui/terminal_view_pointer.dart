@@ -252,6 +252,10 @@ extension _TerminalViewPointer on TerminalViewState {
 
   void __pointerOnSignal(PointerSignalEvent e) {
     if (e is! PointerScrollEvent) return;
+    TerminalScrollTrace.log(
+      'view',
+      'PointerScrollEvent pos=${e.localPosition} delta=${e.scrollDelta}',
+    );
     _scrollController.stopFling();
     final hw = HardwareKeyboard.instance;
     final (r, c, _) = _cellAt(e.localPosition);
