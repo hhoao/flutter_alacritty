@@ -564,6 +564,15 @@ class TerminalViewState extends State<TerminalView>
       );
       unawaited(_attachGpuSurface());
     }
+    // Flutter Focus only auto-requests on first attach. Hosts that keep the
+    // view mounted (chat overlay ↔ terminal, offstage keep-alive) flip
+    // [autofocus] false→true when the surface becomes interactive again.
+    if (widget.autofocus && !oldWidget.autofocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        requestTerminalFocus();
+      });
+    }
   }
 
   /// Prefer GPU when forced, or when `FLUTTER_ALACRITTY_GPU=1` (default probe).
