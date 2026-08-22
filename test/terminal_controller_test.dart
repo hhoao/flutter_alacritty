@@ -176,6 +176,40 @@ void main() {
       expect(binding.scrollToBottomCalls, 1);
     });
 
+    test('selectAll spans the full scrollback and restores the viewport',
+        () async {
+      binding
+        ..displayOffsetSim = 40
+        ..historySizeSim = 100;
+      engine.refreshView(); // size the mirror grid (24 rows × 80 cols)
+      final snapshotsBefore = binding.fullSnapshotCalls;
+
+      await controller.selectAll();
+
+      expect(binding.scrollToBottomCalls, 1,
+          reason: 'anchor needs the live-bottom viewport');
+      expect(binding.scrollToTopCalls, 1,
+          reason: 'focus needs the history-top viewport');
+      expect(binding.scrollToOffsetCalls, 1);
+      expect(binding.scrollToOffsetArgs.single, 40,
+          reason: 'viewport restored to the pre-select position');
+      expect(binding.selStartCalls, 1);
+      expect(binding.selClearCalls, 0);
+      expect(controller.selectionActive, isTrue);
+      expect(binding.fullSnapshotCalls, greaterThan(snapshotsBefore),
+          reason: 'refreshView paints the selection highlight — without it '
+              'the engine-side selection never reaches the mirror grid');
+    });
+
+    test('selectAll is a no-op on an unsized grid', () async {
+      // Fresh binding: the mirror grid never received a full snapshot.
+      await controller.selectAll();
+      expect(binding.selStartCalls, 0);
+      expect(binding.scrollToBottomCalls, 0);
+      expect(binding.scrollToTopCalls, 0);
+      expect(controller.selectionActive, isFalse);
+    });
+
     // Plan 2W code-review fix: onTerminalInputStart lives on the controller
     // so paste / drop / keystroke paths share one gated implementation. These
     // tests pin the gates so the paste path (defaultPasteAction) can't drift

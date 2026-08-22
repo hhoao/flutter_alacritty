@@ -13,6 +13,7 @@ import 'package:flutter/services.dart'
         LogicalKeyboardKey;
 
 import '../controller/terminal_controller.dart';
+import '../debug/terminal_scroll_trace.dart';
 import '../engine/terminal_engine.dart';
 import '../input/ime_key_routing.dart';
 import '../input/ime_session.dart';
@@ -291,6 +292,15 @@ class TerminalViewState extends State<TerminalView>
   Offset? _secondaryDownGlobal;
   DateTime _lastClick = DateTime.fromMillisecondsSinceEpoch(0);
   bool _selecting = false;
+  // Drag-selection auto-scroll: while the pointer sits outside the cell area
+  // during a selection drag, the viewport scrolls one line per tick in the
+  // held direction (-1 = up into history, 1 = down toward live bottom) and
+  // the selection endpoint follows the held edge row.
+  Timer? _selectionScrollTimer;
+  int _selectionScrollDirection = 0;
+  bool _selectionScrollInFlight = false;
+  int _selectionScrollCol = 0;
+  bool _selectionScrollRightHalf = false;
   // Set when a primary-button press activated a link, so the matching release
   // is swallowed instead of reported to the program (which would otherwise see
   // a phantom click and open the link a second time externally).
@@ -740,6 +750,7 @@ class TerminalViewState extends State<TerminalView>
 
   @override
   void dispose() {
+    _stopSelectionAutoScroll();
     widget.engine.onCancelCoalescedScroll = null;
     widget.engine.onDrainHistoryScroll = null;
     _scrollController.dispose();
@@ -1144,6 +1155,12 @@ class TerminalViewState extends State<TerminalView>
             },
             onPointerPanZoomUpdate: (e) {
               _recordPanSample(e.timeStamp, e.localPanDelta.dy);
+              // Trackpad pan must report at the hovered cell — the TUI's
+              // hit-test dispatches the scroll event from that cell, and a
+              // stale default (1,1) lands outside scrollable regions (opencode
+              // would never scroll). Mirrors `__pointerOnSignal` for wheels.
+              final (r, c, _) = _cellAt(e.localPosition);
+              _scrollController.setWheelCell(col: c + 1, row: r + 1);
               _scrollController.onPanDelta(
                 dyPx: e.localPanDelta.dy,
                 shiftHeld: HardwareKeyboard.instance.isShiftPressed,

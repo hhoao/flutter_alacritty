@@ -1,3 +1,24 @@
+## 2.4.1
+
+### Fix
+
+- **Fix:** Trackpad pan (`PointerPanZoomUpdate`) now reports the hovered cell
+  instead of the stale default (1,1), so SGR-mouse TUIs that hit-test scroll
+  events from the reported cell (opencode/opentui) scroll their message
+  region instead of missing it. Discrete wheels were unaffected.
+- **Tests:** Real-engine regression coverage — opencode-style boot sequences
+  mirror mouse-mode flags; wheel → SGR 64/65 reports; `PointerScrollEvent`
+  and trackpad pan through `TerminalView` emit reports at the hovered cell.
+
+### Diagnostics
+
+- **Feat:** `FLUTTER_ALACRITTY_SCROLL_TRACE=true` enables the scroll pipeline
+  trace at runtime (desktop), besides the compile-time
+  `TERMINAL_SCROLL_TRACE=true` dart-define (whose `=1` form silently stays
+  off — `bool.fromEnvironment` only accepts `"true"`/`"false"`).
+- **Feat:** Trace now logs program-scroll routing: destination, mode flags,
+  report counts, hovered cell, and the batched PTY bytes.
+
 ## 2.4.0
 
 ### TUI scroll performance

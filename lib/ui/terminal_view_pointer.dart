@@ -129,6 +129,7 @@ extension _TerminalViewPointer on TerminalViewState {
     }
     final localSelect = !anyMouse(_grid.modeFlags) || hw.isShiftPressed;
     if (localSelect && e.buttons & kPrimaryButton != 0) {
+      _stopSelectionAutoScroll();
       final now = DateTime.now();
       _clickCount = (now.difference(_lastClick) < widget.doubleClickThreshold)
           ? (_clickCount % 3) + 1
@@ -188,9 +189,7 @@ extension _TerminalViewPointer on TerminalViewState {
     // A link-activating press is in flight; don't report drag to the program.
     if (_linkActivatedOnDown) return;
     if (_selecting) {
-      final (r, c, rh) = _cellAt(e.localPosition);
-      _controller.selectionUpdate(r, c, rh);
-      _refreshSelection();
+      _updateSelectionDrag(e.localPosition);
       return;
     }
     if (e.buttons == 0) {
@@ -233,6 +232,7 @@ extension _TerminalViewPointer on TerminalViewState {
     }
     if (_selecting) {
       _selecting = false;
+      _stopSelectionAutoScroll();
       _controller.capturePrimary();
       if (widget.onTapUp != null) {
         final (r, c, _) = _cellAt(e.localPosition);
@@ -252,6 +252,10 @@ extension _TerminalViewPointer on TerminalViewState {
 
   void __pointerOnSignal(PointerSignalEvent e) {
     if (e is! PointerScrollEvent) return;
+    TerminalScrollTrace.log(
+      'view',
+      'PointerScrollEvent pos=${e.localPosition} delta=${e.scrollDelta}',
+    );
     _scrollController.stopFling();
     final hw = HardwareKeyboard.instance;
     final (r, c, _) = _cellAt(e.localPosition);
@@ -299,5 +303,88 @@ extension _TerminalViewPointer on TerminalViewState {
   void __pointerOnLongPressEnd(LongPressEndDetails e) {
     _selecting = false;
     _controller.capturePrimary();
+  }
+
+  /// Move the drag-selection endpoint to [local] (listener coords), and when
+  /// the pointer leaves the cell area vertically, keep scrolling the viewport
+  /// in that direction so the selection can grow past the window edge
+  /// (alacritty desktop drag-selection parity). The mirror grid is repainted
+  /// on every move so the highlight follows without waiting for engine damage.
+  void _updateSelectionDrag(Offset local) {
+    final vp = _viewport;
+    final cellLocal = vp == null
+        ? local
+        : Offset(local.dx - vp.paddingX, local.dy - vp.paddingY);
+    final maxCol = _grid.columns > 0 ? _grid.columns - 1 : 0;
+    final maxRow = _grid.rows > 0 ? _grid.rows - 1 : 0;
+    final col = (cellLocal.dx / _metrics.width).floor().clamp(0, maxCol);
+    final yRows = cellLocal.dy / _metrics.height - _grid.scrollFraction;
+    final rawRow = yRows.floor();
+    // Outside the cell area vertically → hold that direction to auto-scroll.
+    final direction = rawRow < 0
+        ? -1
+        : rawRow > maxRow
+            ? 1
+            : 0;
+    final row = rawRow.clamp(0, maxRow);
+    final rightHalf = (cellLocal.dx / _metrics.width) - col > 0.5;
+    _selectionScrollCol = col;
+    _selectionScrollRightHalf = rightHalf;
+    _syncSelectionAutoScroll(direction);
+    _controller.selectionUpdate(row, col, rightHalf);
+    _refreshSelection();
+  }
+
+  void _syncSelectionAutoScroll(int direction) {
+    if (direction == _selectionScrollDirection) return;
+    _stopSelectionAutoScroll();
+    if (direction != 0) _startSelectionAutoScroll(direction);
+  }
+
+  void _startSelectionAutoScroll(int direction) {
+    _selectionScrollDirection = direction;
+    _selectionScrollTimer = Timer.periodic(
+      const Duration(milliseconds: 30),
+      (_) => unawaited(_selectionAutoScrollTick()),
+    );
+  }
+
+  void _stopSelectionAutoScroll() {
+    _selectionScrollTimer?.cancel();
+    _selectionScrollTimer = null;
+    _selectionScrollDirection = 0;
+    _selectionScrollInFlight = false;
+  }
+
+  Future<void> _selectionAutoScrollTick() async {
+    if (_selectionScrollInFlight) return;
+    if (!_selecting) {
+      _stopSelectionAutoScroll();
+      return;
+    }
+    _selectionScrollInFlight = true;
+    try {
+      final grid = _grid;
+      // Scrolling up into history is a positive display delta; down toward
+      // live bottom is negative. No-op at the buffer edges.
+      final delta = _selectionScrollDirection < 0
+          ? (grid.displayOffset >= grid.historySize ? 0 : 1)
+          : (grid.displayOffset <= 0 ? 0 : -1);
+      if (delta == 0) return;
+      await _engine.scrollLines(delta);
+      if (!_selecting || _selectionScrollDirection == 0) return;
+      // Re-anchor the endpoint to the held edge row at the new viewport so the
+      // drag keeps extending through the lines scrolled into view.
+      final maxRow = _grid.rows > 0 ? _grid.rows - 1 : 0;
+      final row = _selectionScrollDirection < 0 ? 0 : maxRow;
+      _controller.selectionUpdate(
+        row,
+        _selectionScrollCol,
+        _selectionScrollRightHalf,
+      );
+      _refreshSelection();
+    } finally {
+      _selectionScrollInFlight = false;
+    }
   }
 }
