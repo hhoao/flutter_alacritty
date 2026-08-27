@@ -239,7 +239,10 @@ class FlutterPtyBackend implements PtyBackend {
   @override
   void kill() {
     _disposeForegroundWatch();
-    _pty.kill();
+    try {
+      _pty.kill();
+    } finally {
+      _pty.dispose();
+    }
   }
 }
-
