@@ -461,8 +461,7 @@ class TerminalEngine {
     _grid.initializeEmpty(rows, columns);
   }
 
-  /// Awaits pending PTY batches. Use in tests before reading [grid].
-  @visibleForTesting
+  /// Awaits pending PTY batches before reading [grid] (production paste ACK).
   Future<void> drainForTest() async {
     // No binding means no work was ever scheduled (the grid is created by the
     // first resize); there is nothing to drain.
