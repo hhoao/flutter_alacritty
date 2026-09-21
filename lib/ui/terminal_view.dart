@@ -264,6 +264,14 @@ class TerminalViewState extends State<TerminalView>
   final ValueNotifier<bool> _blinkOn = ValueNotifier(true);
   Timer? _blinkTimer;
 
+  /// Ticker-mode visibility (hidden keep-alive hosts disable tickers). The
+  /// blink timer and grid repaint listener are parked while hidden so an
+  /// idle background terminal costs nothing: a bare `Timer.periodic` is not
+  /// gated by [TickerMode], and a hidden `RenderCustomPaint` still has its
+  /// painter listener attached, so every grid mutation would keep marking
+  /// repaint boundaries dirty and churning the compositing walk.
+  bool _tickerEnabled = true;
+
   late TerminalViewportController _viewportController;
   TerminalViewport? _viewport;
 
@@ -422,7 +430,13 @@ class TerminalViewState extends State<TerminalView>
           ? widget.bellDuration
           : const Duration(milliseconds: 1),
     );
-    _blinkTimer = Timer.periodic(widget.cursorBlinkInterval, (_) => _blinkTick());
+    // Blink timer arm is also gated by TickerMode via didChangeDependencies;
+    // initState may run under a disabled ticker already (deferred/hidden
+    // mounts), in which case didChangeDependencies will arm it later.
+    if (_tickerEnabled) {
+      _blinkTimer =
+          Timer.periodic(widget.cursorBlinkInterval, (_) => _blinkTick());
+    }
     _focus.addListener(_reportFocus);
     _focus.addListener(_handleImeFocusChange);
     _syncKeyInjector();
@@ -439,6 +453,41 @@ class TerminalViewState extends State<TerminalView>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _applyTickerEnabled(TickerMode.valuesOf(context).enabled);
+  }
+
+  /// Parks the blink timer while the view is hidden ([TickerMode] disabled by
+  /// keep-alive hosts) and resumes it on re-show. Also mutes the grid's view
+  /// repaint notifications: a hidden `RenderCustomPaint` keeps its painter
+  /// listener attached, so every background PTY update would mark repaint
+  /// boundaries dirty and churn the compositing walk without ever painting.
+  /// Unmuting flushes anything applied while hidden.
+  void _applyTickerEnabled(bool enabled) {
+    if (_tickerEnabled == enabled) return;
+    _tickerEnabled = enabled;
+    _grid.muteViewRepaint(!enabled);
+    if (enabled) {
+      _blinkTimer ??= Timer.periodic(
+        widget.cursorBlinkInterval,
+        (_) => _blinkTick(),
+      );
+      // Content kept flowing while muted; unmute already flushed the pending
+      // notification (or none was pending) — no extra requestRepaint needed.
+    } else {
+      _blinkTimer?.cancel();
+      _blinkTimer = null;
+      if (!_blinkOn.value) {
+        // One-time flip back to solid while hidden. This does mark the (hidden)
+        // cursor layer dirty once — its paint is skipped by the keep-alive
+        // layer, and on re-show the cursor is already correct.
+        _blinkOn.value = true; // hold solid while hidden
+      }
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant TerminalView oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Engine swap: the host replaced the engine (e.g. ExampleTerminalApp
@@ -450,6 +499,10 @@ class TerminalViewState extends State<TerminalView>
     // `bell after engine swap still flashes`.
     if (!identical(widget.engine, oldWidget.engine)) {
       oldWidget.engine.onCancelCoalescedScroll = null;
+      // The old grid stays muted if the view is hidden; its engine disposes
+      // it shortly. The new grid must inherit the current visibility state —
+      // an engine swap does not re-run didChangeDependencies.
+      widget.engine.gridForView.muteViewRepaint(!_tickerEnabled);
       _bellSub?.cancel();
       _bellSub = widget.engine.bell.listen((_) => _flashBell());
       _lastReportedCaretRect = null;
@@ -519,8 +572,11 @@ class TerminalViewState extends State<TerminalView>
     }
     if (oldWidget.cursorBlinkInterval != widget.cursorBlinkInterval) {
       _blinkTimer?.cancel();
-      _blinkTimer =
-          Timer.periodic(widget.cursorBlinkInterval, (_) => _blinkTick());
+      _blinkTimer = null;
+      if (_tickerEnabled) {
+        _blinkTimer =
+            Timer.periodic(widget.cursorBlinkInterval, (_) => _blinkTick());
+      }
     }
     if (oldWidget.textStyle != widget.textStyle) {
       setState(() {
@@ -709,6 +765,7 @@ class TerminalViewState extends State<TerminalView>
         willChange: true,
         painter: TerminalPainter(
           grid: _grid,
+          repaint: _grid.viewRepaint,
           glyphs: _glyphs,
           cellWidth: _metrics.width,
           cellHeight: _metrics.height,
@@ -1216,6 +1273,7 @@ class TerminalViewState extends State<TerminalView>
                         willChange: true,
                         painter: CursorPainter(
                           grid: _grid,
+                          repaint: _grid.viewRepaint,
                           glyphs: _glyphs,
                           cellWidth: _metrics.width,
                           cellHeight: _metrics.height,

@@ -254,11 +254,18 @@ class TerminalPainter extends CustomPainter {
     this.atlas,
     this.backgroundOpacity = 1.0,
     this.retain,
+    this.repaint,
   })  : _paintGeneration = grid.generation,
         _atlasGeneration = atlas?.generation ?? 0,
-        super(repaint: grid);
+        super(repaint: repaint ?? grid);
 
   final MirrorGrid grid;
+
+  /// Repaint listenable override for views that can be hidden: pass
+  /// [MirrorGrid.viewRepaint] so [MirrorGrid.muteViewRepaint] can park this
+  /// painter while the view is not painting (keep-alive hosts). Defaults to
+  /// the grid itself (tests, benchmarks, one-shot renders).
+  final Listenable? repaint;
   final GlyphCache glyphs;
 
   /// When non-null, glyphs are batched through this atlas with a single
@@ -788,15 +795,20 @@ class CursorPainter extends CustomPainter {
     required this.cellWidth,
     required this.cellHeight,
     required this.blinkOn,
+    this.repaint,
   })  : _paintGeneration = grid.generation,
         _blink = blinkOn.value,
-        super(repaint: Listenable.merge([grid, blinkOn]));
+        super(repaint: Listenable.merge([repaint ?? grid, blinkOn]));
 
   final MirrorGrid grid;
   final GlyphCache glyphs;
   final double cellWidth;
   final double cellHeight;
   final ValueListenable<bool> blinkOn;
+
+  /// See [TerminalPainter.repaint] — views that can be hidden pass the grid's
+  /// [MirrorGrid.viewRepaint] proxy so muting parks the cursor layer too.
+  final Listenable? repaint;
   final int _paintGeneration;
   final bool _blink;
 

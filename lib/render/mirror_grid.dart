@@ -185,8 +185,43 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
   @override
   void dispose() {
     _repaintDisposed = true;
+    // Detach the view-repaint proxy before the ChangeNotifier clears its
+    // listener list, so its _forward is never invoked after dispose.
+    _viewRepaintProxy?._detach();
+    _viewRepaintProxy = null;
     super.dispose();
   }
+
+  /// Repaint listenable for attached views that can be hidden (keep-alive
+  /// hosts park the widget without unmounting). While muted, grid mutations
+  /// do NOT notify — a hidden `RenderCustomPaint` would otherwise keep its
+  /// painter listener registered, get `markNeedsPaint`d on every background
+  /// PTY update, and churn the compositing walk without ever painting.
+  /// Painters must bind `repaint: viewRepaint` instead of the grid itself.
+  ///
+  /// Mutations still apply to the cell data; unmuting
+  /// (`muteViewRepaint(false)`) flushes a pending notification if updates
+  /// arrived while hidden.
+  Listenable get viewRepaint => _viewRepaintProxy ??= _ViewRepaintProxy(this);
+  _ViewRepaintProxy? _viewRepaintProxy;
+
+  /// True while view repaint notifications are muted (view hidden).
+  bool get viewRepaintMuted => _viewRepaintMuted;
+  bool _viewRepaintMuted = false;
+
+  /// Mutes (or unmutes) repaint notifications to hidden views. Unmuting
+  /// flushes one pending notification if updates arrived while muted.
+  void muteViewRepaint(bool muted) {
+    if (_viewRepaintMuted == muted) return;
+    _viewRepaintMuted = muted;
+    if (!muted && _viewRepaintProxy != null && _pendingViewRepaint) {
+      _pendingViewRepaint = false;
+      _viewRepaintProxy!._notify();
+    }
+  }
+
+  /// Whether updates arrived while muted; drained by the unmute notification.
+  bool _pendingViewRepaint = false;
 
   /// Notifies repaint listeners at most once per vsync.
   ///
@@ -203,6 +238,12 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
 
   void _notifyRepaint() {
     if (_repaintDisposed) return;
+    // Hidden views are muted: record the pending update so unmute can flush
+    // once, but skip scheduling frames entirely while nobody will paint.
+    if (_viewRepaintMuted) {
+      _pendingViewRepaint = true;
+      return;
+    }
     // Detached engines (PTY still feeding after TerminalView unmount) must not
     // scheduleFrames — that starves Priority.idle mounts (e.g. landing compose).
     if (!hasListeners) return;
@@ -481,5 +522,53 @@ class MirrorGrid extends ChangeNotifier implements TerminalGridView {
       _overFlags.setRange(0, copy, o.flags);
       _overHyperlinkId.setRange(0, copy, o.hyperlinkId);
     }
+  }
+}
+
+/// Forwards the grid's repaint notifications to painters. Painters bind
+/// `repaint: grid.viewRepaint` so [MirrorGrid.muteViewRepaint] can park them
+/// while the view is hidden; this proxy subscribes to the grid itself so the
+/// normal (unmuted) notification path reaches the painters unchanged.
+class _ViewRepaintProxy extends ChangeNotifier {
+  _ViewRepaintProxy(this._grid) {
+    _grid.addListener(_forward);
+  }
+
+  final MirrorGrid _grid;
+
+  void _forward() {
+    if (_detached) return;
+    // Muted while hidden: the grid does not notify in that state (see
+    // _notifyRepaint's early return), but guard anyway in case a direct
+    // notifyListeners slips through.
+    if (_grid._viewRepaintMuted) return;
+    if (_grid._repaintDisposed) return;
+    notifyListeners();
+  }
+
+  /// Flush notification on unmute; NOT routed through the grid.
+  void _notify() {
+    if (_detached || _grid._repaintDisposed) return;
+    notifyListeners();
+  }
+
+  /// Called by [MirrorGrid.dispose]; stops forwarding. The proxy itself is
+  /// never disposed as a ChangeNotifier because painters may outlive the grid
+  /// dispose call by a frame — RenderCustomPaint removes its listener during
+  /// its own detach — and notifying after ChangeNotifier.dispose asserts.
+  bool _detached = false;
+  void _detach() {
+    _detached = true;
+    try {
+      _grid.removeListener(_forward);
+    } on Object {
+      // Grid already disposed its notifier — listeners cleared.
+    }
+  }
+
+  @override
+  void dispose() {
+    _detach();
+    super.dispose();
   }
 }
