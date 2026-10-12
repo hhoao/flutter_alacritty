@@ -92,6 +92,9 @@ Future<RenderUpdate> engineScrollToOffset({
 void engineClearHistory({required TerminalEngine engine}) =>
     RustLib.instance.api.crateApiTerminalEngineClearHistory(engine: engine);
 
+void engineClearTerminal({required TerminalEngine engine}) =>
+    RustLib.instance.api.crateApiTerminalEngineClearTerminal(engine: engine);
+
 void engineSelectionStart({
   required TerminalEngine engine,
   required int displayRow,

@@ -231,6 +231,8 @@ class FakeBinding implements RewireableEngineBinding {
   }
   @override
   void clearHistory() {}
+  @override
+  void clearTerminal() {}
   int reconfigureCalls = 0;
   EngineConfig? lastReconfigure;
   @override

@@ -33,6 +33,7 @@ abstract class EngineBinding {
   /// Absolute scroll offset in lines (`0` = live bottom).
   Future<GridUpdate> scrollToOffset(double offsetLines);
   void clearHistory();
+  void clearTerminal();
   void reconfigure(EngineConfig config);
   void respondClipboardLoad(String text);
   void setCellPixels(int width, int height);
@@ -185,6 +186,9 @@ class FrbEngineBinding implements EngineBinding, RasterPresentBinding {
 
   @override
   void clearHistory() => engineClearHistory(engine: _engine);
+
+  @override
+  void clearTerminal() => engineClearTerminal(engine: _engine);
 
   @override
   void reconfigure(EngineConfig config) =>

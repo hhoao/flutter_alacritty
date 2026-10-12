@@ -387,6 +387,11 @@ class TerminalEngineClient {
     refreshView();
   }
 
+  void clearTerminal() {
+    _binding.clearTerminal();
+    refreshView();
+  }
+
   /// Drain terminal→host events synchronously (e.g. OSC 52 paste reply).
   void pumpEventsNow() => _binding.pumpEvents();
 

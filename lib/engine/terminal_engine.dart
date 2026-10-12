@@ -395,6 +395,10 @@ class TerminalEngine {
   /// Clear scrollback history (alacritty ClearHistory). No-op until bound.
   void clearHistory() => _client?.clearHistory();
 
+  /// Clear scrollback and the current screen. Does not write to the PTY.
+  /// No-op until bound.
+  void clearTerminal() => _client?.clearTerminal();
+
   /// Answer a pending OSC 52 paste request with [text] (host reads the system
   /// clipboard, then calls this). Encoded reply goes out on [output].
   void respondClipboardLoad(String text) {

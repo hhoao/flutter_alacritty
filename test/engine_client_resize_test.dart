@@ -61,6 +61,8 @@ class _SlowBinding implements EngineBinding {
   @override
   void clearHistory() {}
   @override
+  void clearTerminal() {}
+  @override
   void reconfigure(EngineConfig c) {}
   @override
   void respondClipboardLoad(String t) {}
@@ -150,6 +152,8 @@ class _ScrollSlowBinding implements EngineBinding {
   Future<GridUpdate> scrollToOffset(double offsetLines) async => _empty();
   @override
   void clearHistory() {}
+  @override
+  void clearTerminal() {}
   @override
   void reconfigure(EngineConfig c) {}
   @override

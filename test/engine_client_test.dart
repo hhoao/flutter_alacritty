@@ -71,6 +71,8 @@ class _SearchFake implements EngineBinding {
   @override
   void clearHistory() {}
   @override
+  void clearTerminal() {}
+  @override
   void reconfigure(EngineConfig config) {}
   @override
   void respondClipboardLoad(String text) {}
@@ -135,6 +137,8 @@ class _SlowFakeBinding implements EngineBinding {
   @override
   void clearHistory() {}
   @override
+  void clearTerminal() {}
+  @override
   void reconfigure(EngineConfig config) {}
   @override
   void respondClipboardLoad(String text) {}
@@ -167,6 +171,7 @@ class _SlowFakeBinding implements EngineBinding {
 
 class _FakeBinding implements EngineBinding {
   int advanceCalls = 0;
+  int clearTerminalCalls = 0;
   int resizeCalls = 0;
   int lastResizeCols = 0;
   int lastResizeRows = 0;
@@ -217,6 +222,10 @@ class _FakeBinding implements EngineBinding {
   Future<GridUpdate> scrollToOffset(double offsetLines) async => fullSnapshot();
   @override
   void clearHistory() {}
+  @override
+  void clearTerminal() {
+    clearTerminalCalls++;
+  }
   @override
   void reconfigure(EngineConfig config) {}
   @override
@@ -344,5 +353,18 @@ void main() {
     expect(binding.searchedSnapshots, 1);
     client.searchClear();
     expect(binding.cleared, isTrue);
+  });
+
+  test('clearTerminal calls binding and refreshes the view', () {
+    final binding = _FakeBinding();
+    final grid = MirrorGrid();
+    grid.initializeEmpty(1, 1);
+    final client = TerminalEngineClient(binding: binding, grid: grid);
+    final gen0 = grid.generation;
+
+    client.clearTerminal();
+
+    expect(binding.clearTerminalCalls, 1);
+    expect(grid.generation, greaterThan(gen0));
   });
 }
